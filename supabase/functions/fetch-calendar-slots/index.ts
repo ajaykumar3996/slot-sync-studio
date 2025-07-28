@@ -45,21 +45,35 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // Get access token for Google Calendar API
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     
-    // Fetch events from Google Calendar
+    // Fetch events from Google Calendar - using the same calendar as approval function
     const calendarEvents = await fetchGoogleCalendarEvents(
       accessToken, 
-      googleCalendarId, 
+      'primary', // Try primary first
       startDate, 
       endDate
     );
     
-    console.log(`Found ${calendarEvents.length} events in Google Calendar`);
-    console.log('Calendar events:', JSON.stringify(calendarEvents.map(event => ({
+    console.log(`Found ${calendarEvents.length} events in Google Calendar (primary)`);
+    
+    // If no events found in primary, try the service account email calendar
+    let allEvents = calendarEvents;
+    if (calendarEvents.length === 0) {
+      const serviceAccountEvents = await fetchGoogleCalendarEvents(
+        accessToken, 
+        googleClientEmail, // Try service account calendar
+        startDate, 
+        endDate
+      );
+      allEvents = serviceAccountEvents;
+      console.log(`Found ${serviceAccountEvents.length} events in service account calendar`);
+    }
+    
+    console.log('Calendar events:', JSON.stringify(allEvents.map(event => ({
       summary: event.summary,
       start: event.start,
       end: event.end
     })), null, 2));
-    const availableSlots = generateAvailableSlots(calendarEvents, startDate, endDate);
+    const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);
 

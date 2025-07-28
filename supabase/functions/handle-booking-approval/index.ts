@@ -101,7 +101,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         `;
 
         const emailResult = await resend.emails.send({
-          from: gmailUser, // Use your Gmail address as the from address
+          from: 'BookMySlot <noreply@bookmyslot.com>',
           to: [bookingRequest.user_email],
           subject,
           html: `

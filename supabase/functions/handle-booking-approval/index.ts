@@ -54,10 +54,12 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // If approved, create Google Calendar event
     if (action === 'approve') {
       try {
-        await createGoogleCalendarEvent(bookingRequest);
-        console.log('Google Calendar event created successfully');
+        console.log('Starting Google Calendar event creation...');
+        const calendarEvent = await createGoogleCalendarEvent(bookingRequest);
+        console.log('Google Calendar event created successfully:', calendarEvent);
       } catch (calendarError) {
         console.error('Failed to create Google Calendar event:', calendarError);
+        console.error('Calendar error details:', calendarError.message);
         // Continue with email sending even if calendar creation fails
       }
     }
@@ -191,15 +193,20 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
 // Function to create Google Calendar event
 async function createGoogleCalendarEvent(bookingRequest: any) {
+  console.log('Getting Google credentials...');
   const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
   const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
   
   if (!googleClientEmail || !googlePrivateKey) {
-    throw new Error('Google credentials not configured');
+    throw new Error('Google credentials not configured - GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY missing');
   }
 
+  console.log('Google client email:', googleClientEmail);
+
+  console.log('Getting Google access token...');
   // Get access token for Google Calendar API
   const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
+  console.log('Access token obtained successfully');
   
   // Parse the booking date and time
   const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
@@ -237,11 +244,15 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
   };
 
   // Try primary calendar first, then fallback to service account calendar
-  const calendars = ['primary', googleClientEmail];
+  const calendars = ['primary', googleClientEmail, 'itmate.ai@gmail.com'];
   let calendarResponse;
+  let lastError;
+  
+  console.log('Attempting to create calendar event on calendars:', calendars);
   
   for (const calendarId of calendars) {
     try {
+      console.log(`Trying calendar: ${calendarId}`);
       calendarResponse = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
         method: 'POST',
         headers: {
@@ -253,21 +264,24 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
 
       if (calendarResponse.ok) {
         const result = await calendarResponse.json();
-        console.log(`Calendar event created successfully on ${calendarId}:`, result);
+        console.log(`✅ Calendar event created successfully on ${calendarId}:`, result.id);
         return result;
       } else {
         const errorData = await calendarResponse.text();
-        console.error(`Failed to create event on ${calendarId}:`, errorData);
+        lastError = `${calendarResponse.status}: ${errorData}`;
+        console.error(`❌ Failed to create event on ${calendarId}: ${lastError}`);
+        
         if (calendarId === calendars[calendars.length - 1]) {
           // Last attempt failed, throw error
-          throw new Error(`Failed to create calendar event on all calendars: ${calendarResponse.status} ${errorData}`);
+          throw new Error(`Failed to create calendar event on all calendars. Last error: ${lastError}`);
         }
         // Continue to next calendar
       }
     } catch (error) {
-      console.error(`Error with calendar ${calendarId}:`, error);
+      lastError = error.message;
+      console.error(`❌ Error with calendar ${calendarId}:`, error.message);
       if (calendarId === calendars[calendars.length - 1]) {
-        throw error;
+        throw new Error(`All calendar attempts failed. Last error: ${lastError}`);
       }
     }
   }

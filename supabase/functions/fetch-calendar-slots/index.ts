@@ -101,6 +101,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     }
     
     console.log(`📊 Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
+    console.log(`📋 FINAL EVENTS BEING PASSED TO SLOT GENERATOR:`, JSON.stringify(allEvents, null, 2));
     const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);
@@ -350,27 +351,30 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
 }
 
 function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
+  console.log(`🔍 Checking conflict for slot: ${slotStart.toISOString()} - ${slotEnd.toISOString()}`);
+  
   const conflict = calendarEvents.some(event => {
     if (!event.start || !event.end) return false;
     
     const eventStart = new Date(event.start.dateTime || event.start.date);
     const eventEnd = new Date(event.end.dateTime || event.end.date);
     
+    console.log(`📅 Comparing with event "${event.summary}": ${eventStart.toISOString()} - ${eventEnd.toISOString()}`);
+    
     // Check if slot overlaps with any existing event
     const hasOverlap = slotStart < eventEnd && slotEnd > eventStart;
     
     if (hasOverlap) {
-      console.log('CONFLICT DETECTED:', {
-        slotStart: slotStart.toISOString(),
-        slotEnd: slotEnd.toISOString(),
-        eventStart: eventStart.toISOString(),
-        eventEnd: eventEnd.toISOString(),
-        eventSummary: event.summary
-      });
+      console.log(`❌ CONFLICT DETECTED: Slot ${slotStart.toISOString()} - ${slotEnd.toISOString()} overlaps with "${event.summary}" ${eventStart.toISOString()} - ${eventEnd.toISOString()}`);
+      return true;
     }
     
-    return hasOverlap;
+    return false;
   });
+  
+  if (!conflict) {
+    console.log(`✅ No conflict found for slot: ${slotStart.toISOString()} - ${slotEnd.toISOString()}`);
+  }
   
   return conflict;
 }

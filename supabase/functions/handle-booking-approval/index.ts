@@ -63,7 +63,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
           : `Booking Request Declined - ${bookingRequest.slot_date}`;
 
         const emailResult = await resend.emails.send({
-          from: "onboarding@resend.dev",
+          from: "ITmate.ai <onboarding@resend.dev>",
           to: [bookingRequest.user_email],
           subject,
           html: `

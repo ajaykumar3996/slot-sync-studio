@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface TimeSlot {
   id: string;
-  date: string;
+  date: Date;
   startTime: string;
   endTime: string;
   isAvailable: boolean;
@@ -283,53 +283,54 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
     for (let hour = 8; hour < 18; hour++) {
       // Generate 30-minute slots
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        // Create date in CST timezone properly
+        // Create slot times in CST timezone
+        // Format: YYYY-MM-DDTHH:MM:SS-06:00 (CST is UTC-6)
         const year = date.getFullYear();
-        const month = date.getMonth();
-        const day = date.getDate();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hourStr = String(hour).padStart(2, '0');
+        const minuteStr = String(minutes).padStart(2, '0');
         
-        // Create the slot start time in CST (UTC-6/UTC-5)
-        // We need to create the time in CST timezone, not local browser timezone
-        const slotStart = new Date();
-        slotStart.setFullYear(year, month, day);
-        slotStart.setHours(hour, minutes, 0, 0);
-        
-        // Convert to CST by adjusting for timezone offset
-        // CST is UTC-6 (standard) or UTC-5 (daylight saving)
-        const cstOffset = 6 * 60; // CST is UTC-6
-        const localOffset = slotStart.getTimezoneOffset();
-        const cstTime = new Date(slotStart.getTime() + (localOffset - cstOffset) * 60000);
+        // Create CST datetime strings (UTC-6)
+        const slotStartCST = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00-06:00`;
         
         // Check both 30-minute and 60-minute slots
         [30, 60].forEach(duration => {
-          const slotEnd = new Date(cstTime);
-          slotEnd.setMinutes(slotEnd.getMinutes() + duration);
+          const endMinutes = minutes + duration;
+          const endHour = hour + Math.floor(endMinutes / 60);
+          const finalMinutes = endMinutes % 60;
           
           // Don't create 60-minute slots that would go past 6 PM CST
-          if (duration === 60 && hour >= 17) return;
+          if (duration === 60 && endHour > 18) return;
           
-          const isAvailable = !hasConflict(calendarEvents, cstTime, slotEnd);
+          const endHourStr = String(endHour).padStart(2, '0');
+          const endMinuteStr = String(finalMinutes).padStart(2, '0');
+          const slotEndCST = `${year}-${month}-${day}T${endHourStr}:${endMinuteStr}:00-06:00`;
           
-          // Format times in CST manually to ensure correct display
-          const startHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-          const endHour = hour + Math.floor((minutes + duration) / 60);
-          const endMinute = (minutes + duration) % 60;
+          // Convert to Date objects for conflict checking
+          const slotStart = new Date(slotStartCST);
+          const slotEnd = new Date(slotEndCST);
+          
+          const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
+          
+          // Format display times in 12-hour format
+          const displayStartHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
           const displayEndHour = endHour === 0 ? 12 : endHour > 12 ? endHour - 12 : endHour;
           
           const startAmPm = hour < 12 ? 'AM' : 'PM';
           const endAmPm = endHour < 12 ? 'AM' : 'PM';
           
-          const startTimeStr = `${startHour}:${minutes.toString().padStart(2, '0')} ${startAmPm}`;
-          const endTimeStr = `${displayEndHour}:${endMinute.toString().padStart(2, '0')} ${endAmPm}`;
+          const startTimeStr = `${displayStartHour}:${minutes.toString().padStart(2, '0')} ${startAmPm}`;
+          const endTimeStr = `${displayEndHour}:${finalMinutes.toString().padStart(2, '0')} ${endAmPm}`;
           
           // Debug logging for conflict detection
           if (!isAvailable) {
-            console.log(`❌ SLOT BLOCKED: ${date.toISOString().split('T')[0]} ${startTimeStr} - ${endTimeStr} (${duration}min)`);
+            console.log(`❌ SLOT BLOCKED: ${year}-${month}-${day} ${startTimeStr} - ${endTimeStr} (${duration}min)`);
           }
           
           slots.push({
-            id: `${date.toISOString().split('T')[0]}-${hour}-${minutes}-${duration}`,
-            date: date.toISOString().split('T')[0],
+            id: `${year}-${month}-${day}-${hour}-${minutes}-${duration}`,
+            date: new Date(year, date.getMonth(), date.getDate()),
             startTime: startTimeStr,
             endTime: endTimeStr,
             isAvailable,

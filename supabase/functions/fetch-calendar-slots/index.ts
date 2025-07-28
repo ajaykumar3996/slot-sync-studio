@@ -55,11 +55,70 @@ const serve_handler = async (req: Request): Promise<Response> => {
     
     console.log('🎯 Using Google Calendar Freebusy API for calendars:', calendarAttempts);
     
-    // Use Google Calendar Freebusy API instead of fetching individual events
-    const freeBusyData = await getFreeBusyData(accessToken, calendarAttempts, startDate, endDate);
-    console.log('📊 Freebusy API response:', JSON.stringify(freeBusyData, null, 2));
+    let availableSlots: TimeSlot[] = [];
     
-    const availableSlots = generateAvailableSlotsFromFreebusy(freeBusyData, startDate, endDate);
+    try {
+      // Try Freebusy API first
+      const freeBusyData = await getFreeBusyData(accessToken, calendarAttempts, startDate, endDate);
+      console.log('📊 Freebusy API response:', JSON.stringify(freeBusyData, null, 2));
+      
+      availableSlots = generateAvailableSlotsFromFreebusy(freeBusyData, startDate, endDate);
+      
+      // If Freebusy didn't return any busy periods, fallback to events API
+      const totalBusyPeriods = Object.values(freeBusyData.calendars || {})
+        .reduce((total: number, calendar: any) => total + (calendar.busy?.length || 0), 0);
+      
+      if (totalBusyPeriods === 0) {
+        console.log('🔄 No busy periods from Freebusy API, falling back to Events API');
+        throw new Error('No busy periods found, using fallback');
+      }
+      
+    } catch (error) {
+      console.error('❌ Freebusy API failed, falling back to Events API:', error.message);
+      
+      // Fallback to original event-based approach
+      let allEvents: any[] = [];
+      let successfulCalendar = null;
+      
+      for (const calendarId of calendarAttempts) {
+        try {
+          console.log(`📍 Trying calendar: ${calendarId}`);
+          
+          const response = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+            `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const events = data.items || [];
+            console.log(`✅ Found ${events.length} events in calendar: ${calendarId}`);
+            
+            if (events.length > 0) {
+              allEvents = events;
+              successfulCalendar = calendarId;
+              console.log('📅 Events found:', events.map(event => ({
+                summary: event.summary,
+                start: event.start,
+                end: event.end
+              })));
+              break;
+            }
+          }
+        } catch (error) {
+          console.error(`💥 Exception with calendar ${calendarId}:`, error.message);
+        }
+      }
+      
+      console.log(`📊 Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
+      availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
+    }
     
     console.log(`Generated ${availableSlots.length} available slots`);
 
@@ -347,6 +406,103 @@ function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: 
   }
   
   return isBusy;
+}
+
+// Keep the original generateAvailableSlots function as fallback
+function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
+  const slots: TimeSlot[] = [];
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
+  
+  // Generate slots for each day between start and end date
+  for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+    // Skip weekends
+    if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
+    
+    // Generate slots from 8 AM to 6 PM CST
+    for (let hour = 8; hour < 18; hour++) {
+      for (let minutes = 0; minutes < 60; minutes += 30) {
+        // Use date-fns to create proper Date objects for the slot times
+        const baseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        const slotStart = new Date(baseDate.getTime() + (hour * 60 + minutes) * 60 * 1000);
+        
+        // Check both 30-minute and 60-minute slots
+        [30, 60].forEach(duration => {
+          const slotEnd = addMinutes(slotStart, duration);
+          
+          // Don't create 60-minute slots that would go past 6 PM
+          if (duration === 60 && slotEnd.getHours() >= 18) return;
+          
+          const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
+          
+          // Format display times in 12-hour format using date-fns
+          const startTimeStr = format(slotStart, 'h:mm a');
+          const endTimeStr = format(slotEnd, 'h:mm a');
+          
+          // Enhanced debug logging
+          const slotDateStr = format(slotStart, 'yyyy-MM-dd');
+          console.log(`🎯 SLOT: ${slotDateStr} ${startTimeStr} - ${endTimeStr} (${duration}min) - ${isAvailable ? 'AVAILABLE' : 'BLOCKED'}`);
+          
+          slots.push({
+            id: `${slotDateStr}-${hour}-${minutes}-${duration}`,
+            date: new Date(baseDate),
+            startTime: startTimeStr,
+            endTime: endTimeStr,
+            isAvailable,
+            duration
+          });
+        });
+      }
+    }
+  }
+  
+  return slots;
+}
+
+function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
+  // Convert slot times to UTC milliseconds for consistent comparison
+  const slotStartUTC = slotStart.getTime();
+  const slotEndUTC = slotEnd.getTime();
+  
+  // Log slot being checked with UTC timestamps and local time display
+  const slotStartStr = format(slotStart, 'yyyy-MM-dd h:mm a');
+  const slotEndStr = format(slotEnd, 'yyyy-MM-dd h:mm a');
+  console.log(`🔍 Checking conflict for slot: ${slotStartStr} - ${slotEndStr}`);
+  console.log(`🕐 Slot UTC timestamps: ${slotStartUTC} - ${slotEndUTC}`);
+  
+  const conflict = calendarEvents.some(event => {
+    if (!event.start || !event.end) return false;
+    
+    // Parse Google Calendar event times and convert to UTC milliseconds
+    const eventStart = parseISO(event.start.dateTime || event.start.date);
+    const eventEnd = parseISO(event.end.dateTime || event.end.date);
+    const eventStartUTC = eventStart.getTime();
+    const eventEndUTC = eventEnd.getTime();
+    
+    // Log event times with both display format and UTC timestamps
+    const eventStartStr = format(eventStart, 'yyyy-MM-dd h:mm a');
+    const eventEndStr = format(eventEnd, 'yyyy-MM-dd h:mm a');
+    console.log(`📅 Event "${event.summary}": ${eventStartStr} - ${eventEndStr}`);
+    console.log(`🕐 Event UTC timestamps: ${eventStartUTC} - ${eventEndUTC}`);
+    
+    // Simple overlap detection using UTC milliseconds
+    // Two intervals overlap if: (slotStart < eventEnd) AND (slotEnd > eventStart)
+    const hasOverlap = (slotStartUTC < eventEndUTC) && (slotEndUTC > eventStartUTC);
+    
+    if (hasOverlap) {
+      console.log(`❌ CONFLICT DETECTED: Slot (${slotStartUTC}-${slotEndUTC}) overlaps with "${event.summary}" (${eventStartUTC}-${eventEndUTC})`);
+      console.log(`❌ CONFLICT: Slot ${slotStartStr} - ${slotEndStr} overlaps with "${event.summary}" ${eventStartStr} - ${eventEndStr}`);
+      return true;
+    }
+    
+    return false;
+  });
+  
+  if (!conflict) {
+    console.log(`✅ AVAILABLE: ${slotStartStr} - ${slotEndStr}`);
+  }
+  
+  return conflict;
 }
 
 serve(serve_handler);

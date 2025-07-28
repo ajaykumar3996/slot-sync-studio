@@ -13,7 +13,7 @@ interface TimeSlot {
   startTime: string;
   endTime: string;
   isAvailable: boolean;
-  duration: number; // 30 or 60 minutes
+  duration: number;
 }
 
 interface SlotCalendarProps {
@@ -27,13 +27,12 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const { toast } = useToast();
   
-  // Fetch slots from Google Calendar via Supabase edge function
   const fetchCalendarSlots = async () => {
     setLoading(true);
     try {
       const today = new Date();
       const endDate = new Date();
-      endDate.setDate(today.getDate() + 14); // Fetch 2 weeks ahead
+      endDate.setDate(today.getDate() + 14);
 
       const { data, error } = await supabase.functions.invoke('fetch-calendar-slots', {
         body: {
@@ -43,16 +42,10 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
       });
 
       if (error) {
-        console.error('Error fetching calendar slots:', error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch available time slots. Please try again.",
-          variant: "destructive",
-        });
+        toast({ title: "Error", description: "Failed to fetch time slots", variant: "destructive" });
         return;
       }
 
-      // Convert API response to TimeSlot format
       const calendarSlots: TimeSlot[] = data.slots.map((slot: any) => ({
         ...slot,
         date: new Date(slot.date)
@@ -60,43 +53,28 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
 
       setSlots(calendarSlots);
       setLastUpdated(new Date());
-      
-      toast({
-        title: "Calendar Updated",
-        description: "Latest availability loaded from Google Calendar",
-      });
+      toast({ title: "Calendar Updated", description: "Latest availability loaded" });
 
     } catch (error) {
-      console.error('Error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to connect to calendar service",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to connect to calendar service", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  // Load slots on component mount
-  useEffect(() => {
-    fetchCalendarSlots();
-  }, []);
+  useEffect(() => { fetchCalendarSlots(); }, []);
 
   const selectedDateSlots = slots.filter(slot => {
-  if (!selectedDate) return false;
-  
-  // Compare in same timezone
-  const slotDate = new Date(slot.date);
-  slotDate.setHours(0,0,0,0);
-  
-  const compareDate = new Date(selectedDate);
-  compareDate.setHours(0,0,0,0);
-  
-  return slotDate.getTime() === compareDate.getTime();
-});
+    if (!selectedDate) return false;
+    const slotDate = new Date(slot.date);
+    slotDate.setHours(0,0,0,0);
+    
+    const compareDate = new Date(selectedDate);
+    compareDate.setHours(0,0,0,0);
+    
+    return slotDate.getTime() === compareDate.getTime();
+  });
 
-  // Group slots by duration for better display
   const slotsByDuration = selectedDateSlots.reduce((acc, slot) => {
     if (!acc[slot.duration]) acc[slot.duration] = [];
     acc[slot.duration].push(slot);
@@ -116,12 +94,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
               <Clock className="h-5 w-5" />
               Select a Date
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchCalendarSlots}
-              disabled={loading}
-            >
+            <Button variant="outline" size="sm" onClick={fetchCalendarSlots} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </CardTitle>
@@ -152,7 +125,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
           <CardTitle>Available Time Slots (CST)</CardTitle>
           {loading && (
             <p className="text-sm text-muted-foreground">
-              Loading latest availability from Google Calendar...
+              Loading latest availability...
             </p>
           )}
         </CardHeader>

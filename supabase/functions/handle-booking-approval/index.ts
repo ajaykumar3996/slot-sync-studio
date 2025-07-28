@@ -256,27 +256,51 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
         email: bookingRequest.user_email,
         displayName: bookingRequest.user_name
       }
-    ]
+    ],
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'email', minutes: 60 },
+        { method: 'popup', minutes: 15 }
+      ]
+    }
   };
 
-  const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/itmate.ai@gmail.com/events', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(calendarEvent),
-  });
+  // Try primary calendar first, then fallback to service account calendar
+  const calendars = ['primary', googleClientEmail];
+  let calendarResponse;
+  
+  for (const calendarId of calendars) {
+    try {
+      calendarResponse = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(calendarEvent),
+      });
 
-  if (!response.ok) {
-    const errorData = await response.text();
-    console.error('Google Calendar API error:', errorData);
-    throw new Error(`Failed to create calendar event: ${response.status} ${errorData}`);
+      if (calendarResponse.ok) {
+        const result = await calendarResponse.json();
+        console.log(`Calendar event created successfully on ${calendarId}:`, result);
+        return result;
+      } else {
+        const errorData = await calendarResponse.text();
+        console.error(`Failed to create event on ${calendarId}:`, errorData);
+        if (calendarId === calendars[calendars.length - 1]) {
+          // Last attempt failed, throw error
+          throw new Error(`Failed to create calendar event on all calendars: ${calendarResponse.status} ${errorData}`);
+        }
+        // Continue to next calendar
+      }
+    } catch (error) {
+      console.error(`Error with calendar ${calendarId}:`, error);
+      if (calendarId === calendars[calendars.length - 1]) {
+        throw error;
+      }
+    }
   }
-
-  const result = await response.json();
-  console.log('Calendar event created:', result);
-  return result;
 }
 
 // Helper function to convert time string to ISO format

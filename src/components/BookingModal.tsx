@@ -53,7 +53,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
           user_name: formData.name.trim(),
           user_email: formData.email.trim(),
           message: formData.message.trim() || null,
-          slot_date: slot.date.toISOString().split('T')[0],
+          slot_date: slot.date.getFullYear() + '-' + String(slot.date.getMonth() + 1).padStart(2, '0') + '-' + String(slot.date.getDate()).padStart(2, '0'),
           slot_start_time: slot.startTime,
           slot_end_time: slot.endTime,
           slot_duration_minutes: slot.duration,

@@ -254,16 +254,20 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
   
   // Parse the booking date and time
   const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
-  const startTime = bookingRequest.slot_start_time; // e.g., "08:00:00"
-  const endTime = bookingRequest.slot_end_time; // e.g., "08:30:00"
+  const startTime = bookingRequest.slot_start_time; // e.g., "8:00 AM"
+  const endTime = bookingRequest.slot_end_time; // e.g., "8:30 AM"
   
   console.log('📅 Event details:', { eventDate, startTime, endTime });
   
-  // Convert to ISO format with CST timezone
-  const startDateTime = `${eventDate}T${startTime}-06:00`;
-  const endDateTime = `${eventDate}T${endTime}-06:00`;
+  // Convert 12-hour format to 24-hour format for ISO string
+  const startTime24 = convertTo24HourFormat(startTime);
+  const endTime24 = convertTo24HourFormat(endTime);
   
-  console.log('🕐 Converted times:', { startDateTime, endDateTime });
+  // Convert to ISO format with CST timezone
+  const startDateTime = `${eventDate}T${startTime24}:00-06:00`;
+  const endDateTime = `${eventDate}T${endTime24}:00-06:00`;
+  
+  console.log('🕐 Converted times:', { startTime24, endTime24, startDateTime, endDateTime });
   
   const calendarEvent = {
     summary: `Meeting with ${bookingRequest.user_name}`,
@@ -437,15 +441,34 @@ function base64UrlEncode(data: any): string {
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
+// Convert 12-hour format to 24-hour format
+function convertTo24HourFormat(timeStr: string): string {
+  const [time, ampm] = timeStr.split(' ');
+  const [hours, minutes] = time.split(':');
+  let hour = parseInt(hours);
+  
+  if (ampm === 'PM' && hour !== 12) {
+    hour += 12;
+  } else if (ampm === 'AM' && hour === 12) {
+    hour = 0;
+  }
+  
+  return `${hour.toString().padStart(2, '0')}:${minutes}`;
+}
+
 // Helper function to create Google Calendar URL for manual addition (fallback)
 function createGoogleCalendarEventUrl(bookingRequest: any): string {
   const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
-  const startTime = bookingRequest.slot_start_time; // e.g., "08:00:00" 
-  const endTime = bookingRequest.slot_end_time; // e.g., "08:30:00"
+  const startTime = bookingRequest.slot_start_time; // e.g., "8:00 AM" 
+  const endTime = bookingRequest.slot_end_time; // e.g., "8:30 AM"
+  
+  // Convert 12-hour format to 24-hour format
+  const startTime24 = convertTo24HourFormat(startTime);
+  const endTime24 = convertTo24HourFormat(endTime);
   
   // Convert to Google Calendar format (YYYYMMDDTHHMMSSZ)
-  const startDateTime = `${eventDate.replace(/-/g, '')}T${startTime.replace(/:/g, '')}00`;
-  const endDateTime = `${eventDate.replace(/-/g, '')}T${endTime.replace(/:/g, '')}00`;
+  const startDateTime = `${eventDate.replace(/-/g, '')}T${startTime24.replace(/:/g, '')}00`;
+  const endDateTime = `${eventDate.replace(/-/g, '')}T${endTime24.replace(/:/g, '')}00`;
   
   const eventTitle = encodeURIComponent(`Meeting with ${bookingRequest.user_name}`);
   const eventDescription = encodeURIComponent(

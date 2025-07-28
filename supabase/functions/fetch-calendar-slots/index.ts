@@ -16,6 +16,18 @@ interface TimeSlot {
   duration: number;
 }
 
+const CST_TIMEZONE = "America/Chicago";
+
+function toCST(date: Date): Date {
+  return new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+}
+
+function getCSTOffsetMs(date: Date): number {
+  const utcDate = new Date(date.toISOString());
+  const cstDate = new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+  return utcDate.getTime() - cstDate.getTime();
+}
+
 const serve_handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -62,15 +74,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
           const events = data.items || [];
           console.log(`Fetched ${events.length} events from calendar ${calendarId}`);
           
-          // Log event details in both UTC and CST
+          // Log event details for debugging
           events.forEach((event: any) => {
-            const startUTC = parseISO(event.start.dateTime || event.start.date);
-            const endUTC = parseISO(event.end.dateTime || event.end.date);
             console.log(`📅 Event: ${event.summary || 'No title'}`, {
-              startUTC: format(startUTC, "yyyy-MM-dd HH:mm:ss"),
-              startCST: format(startUTC, "yyyy-MM-dd HH:mm:ssXXX"),
-              endUTC: format(endUTC, "yyyy-MM-dd HH:mm:ss"),
-              endCST: format(endUTC, "yyyy-MM-dd HH:mm:ssXXX")
+              start: event.start?.dateTime || event.start?.date,
+              end: event.end?.dateTime || event.end?.date
             });
           });
           
@@ -114,72 +122,137 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 };
 
-// ... (getGoogleAccessToken, createJWT, and base64UrlEncode functions remain the same) ...
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  try {
+    const jwt = await createJWT(clientEmail, privateKey);
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    return tokenData.access_token;
+  } catch (error) {
+    console.error('Failed to get access token:', error);
+    throw new Error(`Authentication failed: ${error.message}`);
+  }
+}
+
+async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/calendar',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  let cleanKey = privateKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\\n/g, '')
+    .replace(/\r?\n|\r/g, '')
+    .replace(/\s+/g, '');
+
+  if (!cleanKey || cleanKey.length === 0) {
+    throw new Error('Private key is empty after cleaning');
+  }
+
+  let binaryKey: string;
+  try {
+    binaryKey = atob(cleanKey);
+  } catch (e) {
+    throw new Error('Invalid base64 format in private key');
+  }
+
+  const keyBytes = new Uint8Array(binaryKey.length);
+  for (let i = 0; i < binaryKey.length; i++) {
+    keyBytes[i] = binaryKey.charCodeAt(i);
+  }
+
+  const cryptoKey = await crypto.subtle.importKey('pkcs8', keyBytes.buffer, {
+    name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput));
+  const encodedSignature = base64UrlEncode(signature);
+  return `${signingInput}.${encodedSignature}`;
+}
+
+function base64UrlEncode(data: any): string {
+  let base64: string;
+  if (typeof data === 'string') {
+    base64 = btoa(data);
+  } else if (data instanceof ArrayBuffer) {
+    base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+  } else {
+    base64 = btoa(JSON.stringify(data));
+  }
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
 
 function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
   
-  // Convert all events to UTC milliseconds for comparison
-  const eventsInUTC = calendarEvents.map(event => {
-    const startUTC = new Date(event.start.dateTime || event.start.date).getTime();
-    const endUTC = new Date(event.end.dateTime || event.end.date).getTime();
-    return {
-      summary: event.summary,
-      startUTC,
-      endUTC
-    };
-  });
-
   for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
-    // Skip weekends
-    if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
+    const cstDate = toCST(currentDate);
+    if (cstDate.getDay() === 0 || cstDate.getDay() === 6) continue;
     
-    const dateStr = format(currentDate, 'yyyy-MM-dd');
+    const cstOffsetMs = getCSTOffsetMs(currentDate);
+    const dateStr = format(cstDate, 'yyyy-MM-dd');
     console.log(`\n📅 Generating slots for ${dateStr}`);
     
-    // Create base 30-minute slots in CST (8AM-6PM)
+    // Create base 30-minute slots
     for (let hour = 8; hour < 18; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        // Create slot in CST
-        const slotStartCST = new Date(currentDate);
-        slotStartCST.setHours(hour, minutes, 0, 0);
+        const slotStartCST = new Date(
+          cstDate.getFullYear(),
+          cstDate.getMonth(),
+          cstDate.getDate(),
+          hour,
+          minutes
+        );
         
-        const slotEndCST = new Date(slotStartCST);
-        slotEndCST.setMinutes(slotStartCST.getMinutes() + 30);
-        
-        // Convert to UTC for comparison
-        const slotStartUTC = slotStartCST.getTime();
-        const slotEndUTC = slotEndCST.getTime();
+        const slotStartUTC = new Date(slotStartCST.getTime() + cstOffsetMs);
+        const slotEndUTC = new Date(slotStartUTC.getTime() + 30 * 60000);
         
         const slotKey = `${hour}:${minutes.toString().padStart(2, '0')}`;
-        const isAvailable = !hasConflict(eventsInUTC, slotStartUTC, slotEndUTC);
-        
+        const isAvailable30 = !hasConflict(calendarEvents, slotStartUTC, slotEndUTC, dateStr, slotKey);
         const startTimeStr = format(slotStartCST, 'h:mm a');
-        const endTimeStr = format(slotEndCST, 'h:mm a');
+        const endTime30Str = format(new Date(slotStartCST.getTime() + 30 * 60000), 'h:mm a');
         
         // Add 30-minute slot
         slots.push({
           id: `${dateStr}-${slotKey}-30`,
           date: new Date(slotStartCST),
           startTime: startTimeStr,
-          endTime: endTimeStr,
-          isAvailable,
+          endTime: endTime30Str,
+          isAvailable: isAvailable30,
           duration: 30
         });
         
-        // Create 60-minute slot if possible
-        if (minutes === 0 && hour < 17) {
-          const slotEnd60CST = new Date(slotStartCST);
-          slotEnd60CST.setMinutes(slotStartCST.getMinutes() + 60);
-          
-          const slotEnd60UTC = slotEnd60CST.getTime();
-          const isAvailable60 = isAvailable && 
-            !hasConflict(eventsInUTC, slotStartUTC + 30*60000, slotEnd60UTC);
+        // Create 60-minute slot if it doesn't go past 6PM
+        if (hour < 17 && minutes === 0) {
+          const slotEnd60UTC = new Date(slotStartUTC.getTime() + 60 * 60000);
+          const nextSlotKey = `${hour+1}:00`;
+          const isAvailable60 = isAvailable30 && 
+            !hasConflict(calendarEvents, new Date(slotStartUTC.getTime() + 30 * 60000), slotEnd60UTC, dateStr, nextSlotKey);
           
           if (isAvailable60) {
-            const endTime60Str = format(slotEnd60CST, 'h:mm a');
+            const endTime60Str = format(new Date(slotStartCST.getTime() + 60 * 60000), 'h:mm a');
             slots.push({
               id: `${dateStr}-${slotKey}-60`,
               date: new Date(slotStartCST),
@@ -196,18 +269,60 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
   return slots;
 }
 
-function hasConflict(eventsInUTC: any[], slotStartUTC: number, slotEndUTC: number): boolean {
-  // Check for overlap with 1ms buffer at boundaries
-  return eventsInUTC.some(event => {
-    const hasOverlap = slotStartUTC < event.endUTC - 1 && slotEndUTC > event.startUTC + 1;
+function hasConflict(
+  calendarEvents: any[], 
+  slotStart: Date, 
+  slotEnd: Date,
+  dateStr: string,
+  slotKey: string
+): boolean {
+  const slotStartTime = slotStart.getTime();
+  const slotEndTime = slotEnd.getTime();
+  
+  // Format times for debugging
+  const slotStartStr = format(slotStart, "yyyy-MM-dd HH:mm:ss");
+  const slotEndStr = format(slotEnd, "yyyy-MM-dd HH:mm:ss");
+  
+  let conflictFound = false;
+  
+  const result = calendarEvents.some(event => {
+    if (!event.start || !event.end) return false;
+    
+    const eventStart = parseISO(event.start.dateTime || event.start.date);
+    const eventEnd = parseISO(event.end.dateTime || event.end.date);
+    const eventStartTime = eventStart.getTime();
+    const eventEndTime = eventEnd.getTime();
+    
+    // Format event times for debugging
+    const eventStartStr = format(eventStart, "yyyy-MM-dd HH:mm:ss");
+    const eventEndStr = format(eventEnd, "yyyy-MM-dd HH:mm:ss");
+    
+    // Log detailed information about the event
+    console.log(`🔍 Checking event: ${event.summary || 'Untitled'}`);
+    console.log(`   Event start: ${eventStartStr} (${eventStartTime})`);
+    console.log(`   Event end:   ${eventEndStr} (${eventEndTime})`);
+    console.log(`   Slot start:  ${slotStartStr} (${slotStartTime})`);
+    console.log(`   Slot end:    ${slotEndStr} (${slotEndTime})`);
+    
+    // Check for overlap
+    const hasOverlap = slotStartTime < eventEndTime && slotEndTime > eventStartTime;
     
     if (hasOverlap) {
-      console.log(`🚨 CONFLICT DETECTED: Slot (${new Date(slotStartUTC).toISOString()} - ${new Date(slotEndUTC).toISOString()})`);
-      console.log(`   Event: ${event.summary} (${new Date(event.startUTC).toISOString()} - ${new Date(event.endUTC).toISOString()})`);
+      console.log(`🚨 CONFLICT DETECTED for ${slotKey} on ${dateStr}`);
+      console.log(`   Slot: ${slotStartStr} to ${slotEndStr}`);
+      console.log(`   Event: ${event.summary || 'Untitled'} (${eventStartStr} to ${eventEndStr})`);
+      conflictFound = true;
       return true;
     }
+    
     return false;
   });
+  
+  if (!conflictFound) {
+    console.log(`✅ No conflict for ${slotKey} on ${dateStr} (${slotStartStr} to ${slotEndStr})`);
+  }
+  
+  return result;
 }
 
 serve(serve_handler);

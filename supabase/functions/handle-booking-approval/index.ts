@@ -54,46 +54,56 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // Send confirmation email to the user
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (resendApiKey) {
-      const resend = new Resend(resendApiKey);
-      
-      const isApproved = action === 'approve';
-      const subject = isApproved 
-        ? `Booking Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
-        : `Booking Request Declined - ${bookingRequest.slot_date}`;
+      try {
+        const resend = new Resend(resendApiKey);
+        
+        const isApproved = action === 'approve';
+        const subject = isApproved 
+          ? `Booking Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
+          : `Booking Request Declined - ${bookingRequest.slot_date}`;
 
-      await resend.emails.send({
-        from: "Booking System <onboarding@resend.dev>",
-        to: [bookingRequest.user_email],
-        subject,
-        html: `
-          <h2>Booking ${isApproved ? 'Confirmed' : 'Declined'}</h2>
-          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
-            <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
-            <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
-            <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
-          </div>
-          
-          ${isApproved ? `
-            <div style="background: #dcfce7; border: 1px solid #22c55e; padding: 15px; border-radius: 6px; color: #15803d;">
-              <p><strong>✅ Your booking has been confirmed!</strong></p>
-              <p>Please add this appointment to your calendar and be available at the scheduled time.</p>
+        const emailResult = await resend.emails.send({
+          from: "onboarding@resend.dev",
+          to: [bookingRequest.user_email],
+          subject,
+          html: `
+            <h2>Booking ${isApproved ? 'Confirmed' : 'Declined'}</h2>
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
+              <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
+              <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
+              <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
             </div>
-          ` : `
-            <div style="background: #fef2f2; border: 1px solid #ef4444; padding: 15px; border-radius: 6px; color: #dc2626;">
-              <p><strong>❌ Your booking request has been declined.</strong></p>
-              <p>Please try booking a different time slot that may work better.</p>
-            </div>
-          `}
-          
-          <p style="margin-top: 20px;">
-            Best regards,<br>
-            ITmate.ai Team
-          </p>
-        `,
-      });
+            
+            ${isApproved ? `
+              <div style="background: #dcfce7; border: 1px solid #22c55e; padding: 15px; border-radius: 6px; color: #15803d;">
+                <p><strong>✅ Your booking has been confirmed!</strong></p>
+                <p>Please add this appointment to your calendar and be available at the scheduled time.</p>
+              </div>
+            ` : `
+              <div style="background: #fef2f2; border: 1px solid #ef4444; padding: 15px; border-radius: 6px; color: #dc2626;">
+                <p><strong>❌ Your booking request has been declined.</strong></p>
+                <p>Please try booking a different time slot that may work better.</p>
+              </div>
+            `}
+            
+            <p style="margin-top: 20px;">
+              Best regards,<br>
+              ITmate.ai Team
+            </p>
+          `,
+        });
 
-      console.log('Confirmation email sent to user');
+        if (emailResult.error) {
+          console.error('Email send failed:', emailResult.error);
+        } else {
+          console.log('Confirmation email sent successfully:', emailResult.data);
+        }
+      } catch (emailError) {
+        console.error('Error sending email:', emailError);
+      }
+    } else {
+      console.error('RESEND_API_KEY not found in environment variables');
     }
 
     // Return success page

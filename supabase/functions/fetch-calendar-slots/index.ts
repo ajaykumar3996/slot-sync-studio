@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,15 +41,12 @@ const serve_handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Create JWT token for Google Calendar API authentication
-    const jwt = await createGoogleJWT(googleClientEmail, googlePrivateKey);
-    
-    // Exchange JWT for access token
-    const googleToken = await exchangeJWTForAccessToken(jwt);
+    // Get access token for Google Calendar API
+    const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     
     // Fetch events from Google Calendar
     const calendarEvents = await fetchGoogleCalendarEvents(
-      googleToken, 
+      accessToken, 
       googleCalendarId, 
       startDate, 
       endDate
@@ -80,90 +76,110 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 };
 
-async function createGoogleJWT(clientEmail: string, privateKey: string): Promise<string> {
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  try {
+    // Create JWT
+    const jwt = await createJWT(clientEmail, privateKey);
+    
+    // Exchange JWT for access token
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('Token exchange failed:', errorText);
+      throw new Error(`Token exchange failed: ${tokenResponse.status}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    return tokenData.access_token;
+  } catch (error) {
+    console.error('Failed to get access token:', error);
+    throw new Error(`Authentication failed: ${error.message}`);
+  }
+}
+
+async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  
   const header = {
     alg: 'RS256',
-    typ: 'JWT'
+    typ: 'JWT',
   };
 
-  const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: clientEmail,
     scope: 'https://www.googleapis.com/auth/calendar.readonly',
     aud: 'https://oauth2.googleapis.com/token',
     exp: now + 3600,
-    iat: now
+    iat: now,
   };
 
-  // Base64url encode header and payload
-  const encodedHeader = base64urlEscape(btoa(JSON.stringify(header)));
-  const encodedPayload = base64urlEscape(btoa(JSON.stringify(payload)));
-  
+  // Encode header and payload
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
-  
-  // Clean up the private key and handle potential formatting issues
-  let cleanedPrivateKey = privateKey
+
+  // Clean private key
+  const cleanKey = privateKey
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\s/g, '')
+    .replace(/\s+/g, '')
     .replace(/\n/g, '');
-  
-  try {
-    // Convert base64 to ArrayBuffer
-    const keyData = Uint8Array.from(atob(cleanedPrivateKey), c => c.charCodeAt(0));
-    
-    // Import the private key
-    const cryptoKey = await crypto.subtle.importKey(
-      'pkcs8',
-      keyData,
-      {
-        name: 'RSASSA-PKCS1-v1_5',
-        hash: 'SHA-256',
-      },
-      false,
-      ['sign']
-    );
-    
-    // Sign the token
-    const signature = await crypto.subtle.sign(
-      'RSASSA-PKCS1-v1_5',
-      cryptoKey,
-      new TextEncoder().encode(signingInput)
-    );
-    
-    // Convert signature to base64url
-    const encodedSignature = base64urlEscape(
-      btoa(String.fromCharCode(...new Uint8Array(signature)))
-    );
-    
-    return `${signingInput}.${encodedSignature}`;
-  } catch (error) {
-    console.error('JWT signing error:', error);
-    throw new Error(`Failed to create JWT: ${error.message}`);
+
+  // Decode base64 private key
+  const binaryKey = atob(cleanKey);
+  const keyBytes = new Uint8Array(binaryKey.length);
+  for (let i = 0; i < binaryKey.length; i++) {
+    keyBytes[i] = binaryKey.charCodeAt(i);
   }
-}
 
-function base64urlEscape(str: string): string {
-  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-async function exchangeJWTForAccessToken(jwt: string): Promise<string> {
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+  // Import key
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyBytes.buffer,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
     },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
-  });
+    false,
+    ['sign']
+  );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Token exchange error:', errorText);
-    throw new Error(`Failed to exchange JWT for access token: ${response.status} ${errorText}`);
+  // Sign
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+
+  const encodedSignature = base64UrlEncode(signature);
+  return `${signingInput}.${encodedSignature}`;
+}
+
+function base64UrlEncode(data: any): string {
+  let base64: string;
+  
+  if (typeof data === 'string') {
+    base64 = btoa(data);
+  } else if (data instanceof ArrayBuffer) {
+    base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+  } else {
+    base64 = btoa(JSON.stringify(data));
   }
-
-  const data = await response.json();
-  return data.access_token;
+  
+  return base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
 async function fetchGoogleCalendarEvents(

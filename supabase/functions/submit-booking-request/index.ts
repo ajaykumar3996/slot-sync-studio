@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// Using fetch with Gmail SMTP API approach
+import { Resend } from "npm:resend@2.0.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,16 +53,55 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     console.log('Booking request saved with ID:', bookingRequest.id);
 
-    // Email sending temporarily disabled - booking requests are saved to database
-    // You can view and manage them through the Supabase dashboard
-    console.log('Booking request saved successfully. Email notifications are temporarily disabled.');
-    console.log('Approval URLs for manual processing:');
+    // Send email notification using Resend with your Gmail as from address
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    const gmailUser = Deno.env.get('GMAIL_USER');
+    
+    if (!resendApiKey || !gmailUser) {
+      console.error('Email credentials not configured');
+      throw new Error('Email service not configured');
+    }
+
+    const resend = new Resend(resendApiKey);
+    console.log('Sending approval email to itmate.ai@gmail.com using Resend');
     
     const approvalUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
     const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
-    
-    console.log('Approve:', approvalUrl);
-    console.log('Reject:', rejectionUrl);
+
+    const emailResponse = await resend.emails.send({
+      from: gmailUser, // Use your Gmail address as the from address
+      to: ["itmate.ai@gmail.com"],
+      subject: `New Booking Request - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
+      html: `
+        <h2>New Booking Request</h2>
+        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3>Booking Details</h3>
+          <p><strong>Name:</strong> ${bookingData.user_name}</p>
+          <p><strong>Email:</strong> ${bookingData.user_email}</p>
+          <p><strong>Date:</strong> ${bookingData.slot_date}</p>
+          <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
+          <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
+          ${bookingData.message ? `<p><strong>Message:</strong> ${bookingData.message}</p>` : ''}
+        </div>
+        
+        <div style="margin: 20px 0;">
+          <a href="${approvalUrl}" 
+             style="background: #22c55e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-right: 10px;">
+            ✅ APPROVE
+          </a>
+          <a href="${rejectionUrl}" 
+             style="background: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            ❌ REJECT
+          </a>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">
+          Click the buttons above to approve or reject this booking request.
+        </p>
+      `,
+    });
+
+    console.log('Approval email sent successfully:', emailResponse);
 
     // Note: User confirmation emails will be sent after approval (limitation of Resend free tier)
 

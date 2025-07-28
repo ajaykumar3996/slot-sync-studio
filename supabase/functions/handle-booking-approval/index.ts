@@ -276,12 +276,6 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
       dateTime: endDateTime,
       timeZone: 'America/Chicago'
     },
-    attendees: [
-      {
-        email: bookingRequest.user_email,
-        displayName: bookingRequest.user_name
-      }
-    ],
     reminders: {
       useDefault: false,
       overrides: [

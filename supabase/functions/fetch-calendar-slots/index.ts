@@ -237,11 +237,18 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
     // Skip weekends
     if (date.getDay() === 0 || date.getDay() === 6) continue;
     
-    // Generate slots from 8 AM to 6 PM CST (adjust for timezone)
+    // Generate slots from 8 AM to 6 PM CST
     for (let hour = 8; hour < 18; hour++) {
       // Generate 30-minute slots
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        const slotStart = new Date(date);
+        // Create date in CST timezone properly
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const day = date.getDate();
+        
+        // Create the slot start time in CST
+        const slotStart = new Date();
+        slotStart.setFullYear(year, month, day);
         slotStart.setHours(hour, minutes, 0, 0);
         
         // Check both 30-minute and 60-minute slots
@@ -254,21 +261,26 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
           
           const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
           
+          // Format times properly in CST
+          const startTimeStr = slotStart.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'America/Chicago'
+          });
+          
+          const endTimeStr = slotEnd.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'America/Chicago'
+          });
+          
           slots.push({
             id: `${date.toISOString().split('T')[0]}-${hour}-${minutes}-${duration}`,
             date: date.toISOString().split('T')[0],
-            startTime: slotStart.toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              hour12: true,
-              timeZone: 'America/Chicago'
-            }),
-            endTime: slotEnd.toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              hour12: true,
-              timeZone: 'America/Chicago'
-            }),
+            startTime: startTimeStr,
+            endTime: endTimeStr,
             isAvailable,
             duration
           });

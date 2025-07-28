@@ -92,13 +92,50 @@ async function createGoogleJWT(clientEmail: string, privateKey: string): Promise
     iat: now
   };
 
-  // Create JWT token (simplified version - in production, use a proper JWT library)
-  const encodedHeader = btoa(JSON.stringify(header));
-  const encodedPayload = btoa(JSON.stringify(payload));
+  // Base64url encode header and payload
+  const encodedHeader = base64urlEscape(btoa(JSON.stringify(header)));
+  const encodedPayload = base64urlEscape(btoa(JSON.stringify(payload)));
   
-  // For now, return a placeholder - this needs proper JWT signing
-  // This would need to be implemented with crypto signing
-  throw new Error('JWT creation not fully implemented - need proper crypto signing');
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  
+  // Clean up the private key
+  const cleanedPrivateKey = privateKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s/g, '');
+  
+  // Convert base64 to ArrayBuffer
+  const keyData = Uint8Array.from(atob(cleanedPrivateKey), c => c.charCodeAt(0));
+  
+  // Import the private key
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyData,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    },
+    false,
+    ['sign']
+  );
+  
+  // Sign the token
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+  
+  // Convert signature to base64url
+  const encodedSignature = base64urlEscape(
+    btoa(String.fromCharCode(...new Uint8Array(signature)))
+  );
+  
+  return `${signingInput}.${encodedSignature}`;
+}
+
+function base64urlEscape(str: string): string {
+  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 async function fetchGoogleCalendarEvents(

@@ -280,12 +280,22 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
     // Skip weekends
     if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
     
-    // Generate slots from 8 AM to 6 PM CST
+    // Generate slots from 8 AM to 6 PM CDT (same timezone as Google Calendar events)
     for (let hour = 8; hour < 18; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        // Use date-fns to create proper Date objects for the slot times
-        const baseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-        const slotStart = new Date(baseDate.getTime() + (hour * 60 + minutes) * 60 * 1000);
+        // Create slot times in CDT timezone to match Google Calendar events
+        // CDT is UTC-5 (during daylight saving time)
+        const cdtOffset = -5 * 60; // CDT offset in minutes from UTC
+        
+        // Create base date at midnight CDT for the current date
+        const baseDateCDT = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        
+        // Adjust for CDT timezone by subtracting the local timezone offset and adding CDT offset
+        const localOffset = baseDateCDT.getTimezoneOffset(); // Local timezone offset in minutes from UTC
+        const offsetDiff = localOffset - cdtOffset; // Difference between local and CDT
+        
+        // Create slot start time in CDT
+        const slotStart = new Date(baseDateCDT.getTime() + (hour * 60 + minutes + offsetDiff) * 60 * 1000);
         
         // Check both 30-minute and 60-minute slots
         [30, 60].forEach(duration => {

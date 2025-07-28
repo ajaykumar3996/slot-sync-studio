@@ -43,7 +43,10 @@ const serve_handler = async (req: Request): Promise<Response> => {
     }
 
     // Create JWT token for Google Calendar API authentication
-    const googleToken = await createGoogleJWT(googleClientEmail, googlePrivateKey);
+    const jwt = await createGoogleJWT(googleClientEmail, googlePrivateKey);
+    
+    // Exchange JWT for access token
+    const googleToken = await exchangeJWTForAccessToken(jwt);
     
     // Fetch events from Google Calendar
     const calendarEvents = await fetchGoogleCalendarEvents(
@@ -98,44 +101,69 @@ async function createGoogleJWT(clientEmail: string, privateKey: string): Promise
   
   const signingInput = `${encodedHeader}.${encodedPayload}`;
   
-  // Clean up the private key
-  const cleanedPrivateKey = privateKey
+  // Clean up the private key and handle potential formatting issues
+  let cleanedPrivateKey = privateKey
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\s/g, '');
+    .replace(/\s/g, '')
+    .replace(/\n/g, '');
   
-  // Convert base64 to ArrayBuffer
-  const keyData = Uint8Array.from(atob(cleanedPrivateKey), c => c.charCodeAt(0));
-  
-  // Import the private key
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyData,
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256',
-    },
-    false,
-    ['sign']
-  );
-  
-  // Sign the token
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    new TextEncoder().encode(signingInput)
-  );
-  
-  // Convert signature to base64url
-  const encodedSignature = base64urlEscape(
-    btoa(String.fromCharCode(...new Uint8Array(signature)))
-  );
-  
-  return `${signingInput}.${encodedSignature}`;
+  try {
+    // Convert base64 to ArrayBuffer
+    const keyData = Uint8Array.from(atob(cleanedPrivateKey), c => c.charCodeAt(0));
+    
+    // Import the private key
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      keyData,
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        hash: 'SHA-256',
+      },
+      false,
+      ['sign']
+    );
+    
+    // Sign the token
+    const signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      new TextEncoder().encode(signingInput)
+    );
+    
+    // Convert signature to base64url
+    const encodedSignature = base64urlEscape(
+      btoa(String.fromCharCode(...new Uint8Array(signature)))
+    );
+    
+    return `${signingInput}.${encodedSignature}`;
+  } catch (error) {
+    console.error('JWT signing error:', error);
+    throw new Error(`Failed to create JWT: ${error.message}`);
+  }
 }
 
 function base64urlEscape(str: string): string {
   return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function exchangeJWTForAccessToken(jwt: string): Promise<string> {
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Token exchange error:', errorText);
+    throw new Error(`Failed to exchange JWT for access token: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
 }
 
 async function fetchGoogleCalendarEvents(

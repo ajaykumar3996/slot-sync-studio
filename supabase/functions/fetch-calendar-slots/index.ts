@@ -205,25 +205,10 @@ async function getFreeBusyData(token: string, calendarIds: string[], startDate: 
 }
 
 function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string, endDate: string): TimeSlot[] {
-  const slots: TimeSlot[] = [];
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
+  // ... existing setup ...
   
-  const allBusyPeriods: Array<{ start: Date; end: Date }> = [];
-  
-  if (freeBusyData.calendars) {
-    Object.keys(freeBusyData.calendars).forEach(calendarId => {
-      const calendar = freeBusyData.calendars[calendarId];
-      if (calendar.busy) {
-        calendar.busy.forEach((busyPeriod: any) => {
-          allBusyPeriods.push({ 
-            start: parseISO(busyPeriod.start), 
-            end: parseISO(busyPeriod.end) 
-          });
-        });
-      }
-    });
-  }
+  // Create 30-minute base slots
+  const baseSlots: TimeSlot[] = [];
   
   for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
     const cstDate = toCST(currentDate);
@@ -231,6 +216,7 @@ function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string
     
     const cstOffsetMs = getCSTOffsetMs(currentDate);
     
+    // Create 30-minute slots from 8AM to 6PM
     for (let hour = 8; hour < 18; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
         const slotStartCST = new Date(
@@ -242,30 +228,56 @@ function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string
         );
         
         const slotStartUTC = new Date(slotStartCST.getTime() + cstOffsetMs);
+        const slotEndUTC = new Date(slotStartUTC.getTime() + 30 * 60000);
         
-        [30, 60].forEach(duration => {
-          if (hour + duration/60 >= 18) return;
-          const slotEndUTC = new Date(slotStartUTC.getTime() + duration * 60000);
-          const slotEndCST = new Date(slotStartCST.getTime() + duration * 60000);
-          
-          const isAvailable = !isSlotBusy(slotStartUTC, slotEndUTC, allBusyPeriods);
-          
-          const startTimeStr = format(slotStartCST, 'h:mm a');
-          const endTimeStr = format(slotEndCST, 'h:mm a');
-          
-          slots.push({
-            id: `${slotStartCST.toISOString()}-${duration}`,
-            date: new Date(slotStartCST),
-            startTime: startTimeStr,
-            endTime: endTimeStr,
-            isAvailable,
-            duration
-          });
+        const isAvailable = !isSlotBusy(slotStartUTC, slotEndUTC, allBusyPeriods);
+        
+        const startTimeStr = format(slotStartCST, 'h:mm a');
+        const endTimeStr = format(new Date(slotStartCST.getTime() + 30 * 60000), 'h:mm a');
+        
+        baseSlots.push({
+          id: `${slotStartCST.toISOString()}-30`,
+          date: new Date(slotStartCST),
+          startTime: startTimeStr,
+          endTime: endTimeStr,
+          isAvailable,
+          duration: 30
         });
       }
     }
   }
-  return slots;
+  
+  // Create 60-minute slots where possible
+  const combinedSlots: TimeSlot[] = [...baseSlots];
+  
+  for (let i = 0; i < baseSlots.length; i++) {
+    const currentSlot = baseSlots[i];
+    
+    // Skip if current slot is booked or near the end of day
+    if (!currentSlot.isAvailable || currentSlot.date.getHours() >= 17) continue;
+    
+    // Find next slot (30 minutes after current)
+    const nextSlotIndex = baseSlots.findIndex(slot => 
+      slot.date.getTime() === currentSlot.date.getTime() &&
+      slot.startTime === format(
+        new Date(currentSlot.date.getTime() + 30 * 60000),
+        'h:mm a'
+      )
+    );
+    
+    if (nextSlotIndex !== -1 && baseSlots[nextSlotIndex].isAvailable) {
+      combinedSlots.push({
+        id: `${currentSlot.id}-60`,
+        date: new Date(currentSlot.date),
+        startTime: currentSlot.startTime,
+        endTime: baseSlots[nextSlotIndex].endTime,
+        isAvailable: true,
+        duration: 60
+      });
+    }
+  }
+  
+  return combinedSlots;
 }
 
 // function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: Date; end: Date }>): boolean {

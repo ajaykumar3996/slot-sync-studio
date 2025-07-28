@@ -283,16 +283,16 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
     for (let hour = 8; hour < 18; hour++) {
       // Generate 30-minute slots
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        // Create slot times in CST timezone
-        // Format: YYYY-MM-DDTHH:MM:SS-06:00 (CST is UTC-6)
+        // Create slot times in CDT timezone (matches Google Calendar)
+        // Format: YYYY-MM-DDTHH:MM:SS-05:00 (CDT is UTC-5, CST is UTC-6)
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hourStr = String(hour).padStart(2, '0');
         const minuteStr = String(minutes).padStart(2, '0');
         
-        // Create CST datetime strings (UTC-6)
-        const slotStartCST = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00-06:00`;
+        // Create CDT datetime strings (UTC-5) to match Google Calendar timezone
+        const slotStartCDT = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00-05:00`;
         
         // Check both 30-minute and 60-minute slots
         [30, 60].forEach(duration => {
@@ -305,11 +305,11 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
           
           const endHourStr = String(endHour).padStart(2, '0');
           const endMinuteStr = String(finalMinutes).padStart(2, '0');
-          const slotEndCST = `${year}-${month}-${day}T${endHourStr}:${endMinuteStr}:00-06:00`;
+          const slotEndCDT = `${year}-${month}-${day}T${endHourStr}:${endMinuteStr}:00-05:00`;
           
           // Convert to Date objects for conflict checking
-          const slotStart = new Date(slotStartCST);
-          const slotEnd = new Date(slotEndCST);
+          const slotStart = new Date(slotStartCDT);
+          const slotEnd = new Date(slotEndCDT);
           
           const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
           

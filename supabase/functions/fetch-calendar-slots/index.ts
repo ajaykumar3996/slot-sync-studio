@@ -53,50 +53,13 @@ const serve_handler = async (req: Request): Promise<Response> => {
       googleClientEmail
     ];
     
-    console.log('🎯 Fetching events from calendars:', calendarAttempts);
+    console.log('🎯 Using Google Calendar Freebusy API for calendars:', calendarAttempts);
     
-    let allEvents: any[] = [];
-    let successfulCalendar = null;
+    // Use Google Calendar Freebusy API instead of fetching individual events
+    const freeBusyData = await getFreeBusyData(accessToken, calendarAttempts, startDate, endDate);
+    console.log('📊 Freebusy API response:', JSON.stringify(freeBusyData, null, 2));
     
-    // Try each calendar until we find one that works
-    for (const calendarId of calendarAttempts) {
-      try {
-        console.log(`📍 Trying calendar: ${calendarId}`);
-        
-        const response = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
-          `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          const events = data.items || [];
-          console.log(`✅ Found ${events.length} events in calendar: ${calendarId}`);
-          
-          if (events.length > 0) {
-            allEvents = events;
-            successfulCalendar = calendarId;
-            console.log('📅 Events found:', events.map(event => ({
-              summary: event.summary,
-              start: event.start,
-              end: event.end
-            })));
-            break; // Use the first calendar that has events
-          }
-        }
-      } catch (error) {
-        console.error(`💥 Exception with calendar ${calendarId}:`, error.message);
-      }
-    }
-    
-    console.log(`📊 Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
-    const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
+    const availableSlots = generateAvailableSlotsFromFreebusy(freeBusyData, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);
 
@@ -245,47 +208,85 @@ function base64UrlEncode(data: any): string {
     .replace(/=/g, '');
 }
 
-async function fetchGoogleCalendarEvents(
-  token: string, 
-  calendarId: string, 
-  startDate: string, 
+async function getFreeBusyData(
+  token: string,
+  calendarIds: string[],
+  startDate: string,
   endDate: string
 ) {
+  const freeBusyRequest = {
+    timeMin: startDate,
+    timeMax: endDate,
+    items: calendarIds.map(id => ({ id }))
+  };
+
+  console.log('🚀 Freebusy API request:', JSON.stringify(freeBusyRequest, null, 2));
+
   const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
-    `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
+    'https://www.googleapis.com/calendar/v3/freeBusy',
     {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify(freeBusyRequest)
     }
   );
 
   if (!response.ok) {
-    throw new Error(`Google Calendar API error: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    console.error('Freebusy API error:', errorText);
+    throw new Error(`Google Calendar Freebusy API error: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
-  return data.items || [];
+  return data;
 }
 
-function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
+function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string, endDate: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const start = parseISO(startDate);
   const end = parseISO(endDate);
+  
+  // Collect all busy periods from all calendars
+  const allBusyPeriods: Array<{ start: Date; end: Date }> = [];
+  
+  if (freeBusyData.calendars) {
+    Object.keys(freeBusyData.calendars).forEach(calendarId => {
+      const calendar = freeBusyData.calendars[calendarId];
+      console.log(`📅 Calendar ${calendarId} busy periods:`, calendar.busy?.length || 0);
+      
+      if (calendar.busy) {
+        calendar.busy.forEach((busyPeriod: any) => {
+          const busyStart = parseISO(busyPeriod.start);
+          const busyEnd = parseISO(busyPeriod.end);
+          allBusyPeriods.push({ start: busyStart, end: busyEnd });
+          
+          console.log(`🚫 BUSY: ${format(busyStart, 'yyyy-MM-dd h:mm a')} - ${format(busyEnd, 'yyyy-MM-dd h:mm a')}`);
+        });
+      }
+    });
+  }
+  
+  console.log(`📊 Total busy periods: ${allBusyPeriods.length}`);
   
   // Generate slots for each day between start and end date
   for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
     // Skip weekends
     if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
     
-    // Generate slots from 8 AM to 6 PM CST
+    // Generate slots from 8 AM to 6 PM CST (treating as local time)
     for (let hour = 8; hour < 18; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        // Use date-fns to create proper Date objects for the slot times
-        const baseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-        const slotStart = new Date(baseDate.getTime() + (hour * 60 + minutes) * 60 * 1000);
+        // Create slot start time in local timezone (CST)
+        const slotStart = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth(),
+          currentDate.getDate(),
+          hour,
+          minutes
+        );
         
         // Check both 30-minute and 60-minute slots
         [30, 60].forEach(duration => {
@@ -294,9 +295,10 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
           // Don't create 60-minute slots that would go past 6 PM
           if (duration === 60 && slotEnd.getHours() >= 18) return;
           
-          const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
+          // Check if this slot conflicts with any busy period
+          const isAvailable = !isSlotBusy(slotStart, slotEnd, allBusyPeriods);
           
-          // Format display times in 12-hour format using date-fns
+          // Format display times in 12-hour format
           const startTimeStr = format(slotStart, 'h:mm a');
           const endTimeStr = format(slotEnd, 'h:mm a');
           
@@ -306,7 +308,7 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
           
           slots.push({
             id: `${slotDateStr}-${hour}-${minutes}-${duration}`,
-            date: new Date(baseDate),
+            date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
             startTime: startTimeStr,
             endTime: endTimeStr,
             isAvailable,
@@ -320,50 +322,31 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
   return slots;
 }
 
-function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
-  // Convert slot times to UTC milliseconds for consistent comparison
-  const slotStartUTC = slotStart.getTime();
-  const slotEndUTC = slotEnd.getTime();
-  
-  // Log slot being checked with UTC timestamps and local time display
+function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: Date; end: Date }>): boolean {
   const slotStartStr = format(slotStart, 'yyyy-MM-dd h:mm a');
   const slotEndStr = format(slotEnd, 'yyyy-MM-dd h:mm a');
-  console.log(`🔍 Checking conflict for slot: ${slotStartStr} - ${slotEndStr}`);
-  console.log(`🕐 Slot UTC timestamps: ${slotStartUTC} - ${slotEndUTC}`);
   
-  const conflict = calendarEvents.some(event => {
-    if (!event.start || !event.end) return false;
-    
-    // Parse Google Calendar event times and convert to UTC milliseconds
-    const eventStart = parseISO(event.start.dateTime || event.start.date);
-    const eventEnd = parseISO(event.end.dateTime || event.end.date);
-    const eventStartUTC = eventStart.getTime();
-    const eventEndUTC = eventEnd.getTime();
-    
-    // Log event times with both display format and UTC timestamps
-    const eventStartStr = format(eventStart, 'yyyy-MM-dd h:mm a');
-    const eventEndStr = format(eventEnd, 'yyyy-MM-dd h:mm a');
-    console.log(`📅 Event "${event.summary}": ${eventStartStr} - ${eventEndStr}`);
-    console.log(`🕐 Event UTC timestamps: ${eventStartUTC} - ${eventEndUTC}`);
-    
-    // Simple overlap detection using UTC milliseconds
-    // Two intervals overlap if: (slotStart < eventEnd) AND (slotEnd > eventStart)
-    const hasOverlap = (slotStartUTC < eventEndUTC) && (slotEndUTC > eventStartUTC);
+  console.log(`🔍 Checking if slot is busy: ${slotStartStr} - ${slotEndStr}`);
+  
+  const isBusy = busyPeriods.some(busy => {
+    // Simple overlap detection: slot overlaps if slotStart < busyEnd AND slotEnd > busyStart
+    const hasOverlap = slotStart < busy.end && slotEnd > busy.start;
     
     if (hasOverlap) {
-      console.log(`❌ CONFLICT DETECTED: Slot (${slotStartUTC}-${slotEndUTC}) overlaps with "${event.summary}" (${eventStartUTC}-${eventEndUTC})`);
-      console.log(`❌ CONFLICT: Slot ${slotStartStr} - ${slotEndStr} overlaps with "${event.summary}" ${eventStartStr} - ${eventEndStr}`);
+      const busyStartStr = format(busy.start, 'yyyy-MM-dd h:mm a');
+      const busyEndStr = format(busy.end, 'yyyy-MM-dd h:mm a');
+      console.log(`❌ CONFLICT: Slot ${slotStartStr} - ${slotEndStr} overlaps with busy period ${busyStartStr} - ${busyEndStr}`);
       return true;
     }
     
     return false;
   });
   
-  if (!conflict) {
+  if (!isBusy) {
     console.log(`✅ AVAILABLE: ${slotStartStr} - ${slotEndStr}`);
   }
   
-  return conflict;
+  return isBusy;
 }
 
 serve(serve_handler);

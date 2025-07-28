@@ -8,6 +8,7 @@ interface TimeSlot {
   startTime: string;
   endTime: string;
   isAvailable: boolean;
+  duration: number; // 30 or 60 minutes
 }
 
 const Index = () => {

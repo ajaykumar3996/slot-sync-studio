@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar, Clock, User, Mail, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface TimeSlot {
   id: string;
@@ -13,6 +14,7 @@ interface TimeSlot {
   startTime: string;
   endTime: string;
   isAvailable: boolean;
+  duration: number; // 30 or 60 minutes
 }
 
 interface BookingModalProps {
@@ -32,19 +34,54 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!slot || !formData.name.trim() || !formData.email.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // Submit booking request via Supabase edge function
+      const { data, error } = await supabase.functions.invoke('submit-booking-request', {
+        body: {
+          user_name: formData.name.trim(),
+          user_email: formData.email.trim(),
+          message: formData.message.trim() || null,
+          slot_date: slot.date.toISOString().split('T')[0],
+          slot_start_time: slot.startTime,
+          slot_end_time: slot.endTime,
+          slot_duration_minutes: slot.duration,
+        }
+      });
 
-    toast({
-      title: "Booking Request Sent!",
-      description: "You'll receive a confirmation email once your booking is approved.",
-    });
+      if (error) {
+        console.error('Booking submission error:', error);
+        throw new Error(error.message);
+      }
+      
+      toast({
+        title: "Booking Request Submitted",
+        description: data.message || "Your booking request has been sent. You'll receive a confirmation email once approved.",
+      });
 
-    setFormData({ name: "", email: "", message: "" });
-    setIsSubmitting(false);
-    onClose();
+      setFormData({ name: "", email: "", message: "" });
+      onClose();
+    } catch (error) {
+      console.error('Error submitting booking:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit booking request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!slot) return null;
@@ -72,7 +109,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4" />
-              <span>{slot.startTime} - {slot.endTime}</span>
+              <span>{slot.startTime} - {slot.endTime} CST ({slot.duration} minutes)</span>
             </div>
           </div>
 

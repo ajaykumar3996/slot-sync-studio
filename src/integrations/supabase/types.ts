@@ -14,7 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      booking_requests: {
+        Row: {
+          approval_token: string | null
+          created_at: string
+          id: string
+          message: string | null
+          slot_date: string
+          slot_duration_minutes: number
+          slot_end_time: string
+          slot_start_time: string
+          status: string
+          timezone: string
+          updated_at: string
+          user_email: string
+          user_name: string
+        }
+        Insert: {
+          approval_token?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          slot_date: string
+          slot_duration_minutes: number
+          slot_end_time: string
+          slot_start_time: string
+          status?: string
+          timezone?: string
+          updated_at?: string
+          user_email: string
+          user_name: string
+        }
+        Update: {
+          approval_token?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          slot_date?: string
+          slot_duration_minutes?: number
+          slot_end_time?: string
+          slot_start_time?: string
+          status?: string
+          timezone?: string
+          updated_at?: string
+          user_email?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

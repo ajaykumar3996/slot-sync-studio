@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// Using fetch for Gmail SMTP API instead of SMTP client
+import { Resend } from "npm:resend@2.0.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,24 +53,25 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     console.log('Booking request saved with ID:', bookingRequest.id);
 
-    // Send email notification to itmate.ai@gmail.com using Gmail API
-    const gmailUser = Deno.env.get('GMAIL_USER');
-    const gmailPassword = Deno.env.get('GMAIL_APP_PASSWORD');
+    // Send email notification to itmate.ai@gmail.com using Resend
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
     
-    if (!gmailUser || !gmailPassword) {
-      console.error('Gmail credentials not configured');
+    if (!resendApiKey) {
+      console.error('RESEND_API_KEY not configured');
       throw new Error('Email service not configured');
     }
 
+    const resend = new Resend(resendApiKey);
     console.log('Sending approval email to itmate.ai@gmail.com');
     
     const approvalUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
     const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
-    // Create email content for approval
-    const approvalEmailContent = createEmailContent(
-      `New Booking Request - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
-      `
+    const emailResponse = await resend.emails.send({
+      from: "ITmate.ai <onboarding@resend.dev>",
+      to: ["itmate.ai@gmail.com"],
+      subject: `New Booking Request - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
+      html: `
         <h2>New Booking Request</h2>
         <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3>Booking Details</h3>
@@ -96,44 +97,12 @@ const serve_handler = async (req: Request): Promise<Response> => {
         <p style="color: #666; font-size: 14px;">
           Click the buttons above to approve or reject this booking request.
         </p>
-      `
-    );
+      `,
+    });
 
-    await sendGmailEmail(gmailUser, gmailPassword, "itmate.ai@gmail.com", approvalEmailContent.subject, approvalEmailContent.body);
-    console.log('Approval email sent successfully');
+    console.log('Approval email sent successfully:', emailResponse);
 
-    // Send immediate confirmation email to the user
-    console.log(`Sending confirmation email to ${bookingData.user_email}`);
-    
-    const userEmailContent = createEmailContent(
-      `Booking Request Received - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
-      `
-        <h2>Booking Request Received</h2>
-        <p>Dear ${bookingData.user_name},</p>
-        <p>We have received your booking request and it is currently being reviewed.</p>
-        
-        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3>Your Booking Details</h3>
-          <p><strong>Date:</strong> ${bookingData.slot_date}</p>
-          <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
-          <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
-          ${bookingData.message ? `<p><strong>Your Message:</strong> ${bookingData.message}</p>` : ''}
-        </div>
-        
-        <div style="background: #e0f2fe; border: 1px solid #0284c7; padding: 15px; border-radius: 6px; color: #075985;">
-          <p><strong>📋 What happens next?</strong></p>
-          <p>Your request will be reviewed and you will receive a confirmation email within 24 hours letting you know if your booking has been approved or if we need to suggest an alternative time.</p>
-        </div>
-        
-        <p style="margin-top: 20px;">
-          Best regards,<br>
-          ITmate.ai Team
-        </p>
-      `
-    );
-
-    await sendGmailEmail(gmailUser, gmailPassword, bookingData.user_email, userEmailContent.subject, userEmailContent.body);
-    console.log('User confirmation email sent successfully');
+    // Note: User confirmation emails will be sent after approval (limitation of Resend free tier)
 
     return new Response(
       JSON.stringify({ 
@@ -157,46 +126,5 @@ const serve_handler = async (req: Request): Promise<Response> => {
     );
   }
 };
-
-// Gmail API email sending function
-async function sendGmailEmail(gmailUser: string, gmailPassword: string, to: string, subject: string, htmlBody: string) {
-  try {
-    const emailData = {
-      to,
-      subject,
-      html: htmlBody,
-      from: gmailUser
-    };
-
-    // For now, let's use a simple approach - we'll implement proper Gmail API later
-    // This is a temporary workaround to avoid the SMTP library issues
-    console.log(`Would send email to ${to} with subject: ${subject}`);
-    
-    // Actually send via a webhook service if available, or log for now
-    return { success: true };
-  } catch (error) {
-    console.error('Email sending failed:', error);
-    throw error;
-  }
-}
-
-// Email content helper
-function createEmailContent(subject: string, body: string) {
-  return {
-    subject,
-    body: `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>${subject}</title>
-        </head>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          ${body}
-        </body>
-      </html>
-    `
-  };
-}
 
 serve(serve_handler);

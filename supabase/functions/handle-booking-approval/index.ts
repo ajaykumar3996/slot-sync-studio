@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "npm:resend@2.0.0";
+import { SmtpClient } from "https://deno.land/x/smtp@v0.7.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,19 +64,18 @@ const serve_handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send confirmation email to the user using Resend
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    // Send confirmation email to the user using Gmail SMTP
+    const gmailUser = Deno.env.get('GMAIL_USER');
+    const gmailPassword = Deno.env.get('GMAIL_APP_PASSWORD');
     
-    if (resendApiKey) {
+    if (gmailUser && gmailPassword) {
       try {
-        const resend = new Resend(resendApiKey);
-        
         const isApproved = action === 'approve';
         const subject = isApproved 
           ? `Booking Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
           : `Booking Request Declined - ${bookingRequest.slot_date}`;
 
-        console.log(`Sending ${isApproved ? 'approval' : 'rejection'} email to ${bookingRequest.user_email}`);
+        console.log(`Sending ${isApproved ? 'approval' : 'rejection'} email to ${bookingRequest.user_email} using Gmail SMTP`);
         
         // Create email content with calendar link for approved bookings
         const calendarSection = isApproved ? `
@@ -99,38 +98,46 @@ const serve_handler = async (req: Request): Promise<Response> => {
           </div>
         `;
 
-        const emailResult = await resend.emails.send({
-          from: "ITmate.ai <onboarding@resend.dev>",
-          to: [bookingRequest.user_email],
-          subject,
-          html: `
-            <h2>Booking ${isApproved ? 'Confirmed' : 'Declined'}</h2>
-            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
-              <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
-              <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
-              <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
-            </div>
-            
-            ${calendarSection}
-            
-            <p style="margin-top: 20px;">
-              Best regards,<br>
-              ITmate.ai Team
-            </p>
-          `,
+        const emailHtml = `
+          <h2>Booking ${isApproved ? 'Confirmed' : 'Declined'}</h2>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
+            <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
+            <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
+            <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
+          </div>
+          
+          ${calendarSection}
+          
+          <p style="margin-top: 20px;">
+            Best regards,<br>
+            ITmate.ai Team
+          </p>
+        `;
+
+        const client = new SmtpClient();
+        await client.connectTLS({
+          hostname: "smtp.gmail.com",
+          port: 587,
+          username: gmailUser,
+          password: gmailPassword,
         });
 
-        if (emailResult.error) {
-          console.error('Email send failed:', emailResult.error);
-        } else {
-          console.log('✅ Confirmation email sent successfully with calendar link:', emailResult.data);
-        }
+        await client.send({
+          from: gmailUser,
+          to: bookingRequest.user_email,
+          subject,
+          content: emailHtml,
+          html: emailHtml,
+        });
+
+        await client.close();
+        console.log('✅ Confirmation email sent successfully via Gmail SMTP with calendar link');
       } catch (emailError) {
-        console.error('Error sending email:', emailError);
+        console.error('Error sending email via Gmail SMTP:', emailError);
       }
     } else {
-      console.error('RESEND_API_KEY not found in environment variables');
+      console.error('Gmail credentials not found in environment variables');
     }
 
     // Return success page

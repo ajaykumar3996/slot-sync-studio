@@ -128,41 +128,61 @@ async function createJWT(clientEmail: string, privateKey: string): Promise<strin
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
 
-  // Clean private key
-  const cleanKey = privateKey
-    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-    .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\s+/g, '')
-    .replace(/\n/g, '');
+  try {
+    // Clean private key - handle all possible formats including escaped newlines
+    let cleanKey = privateKey
+      .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+      .replace(/-----END PRIVATE KEY-----/g, '')
+      .replace(/\\n/g, '') // Handle escaped newlines like \n in strings
+      .replace(/\r?\n|\r/g, '') // Handle actual newlines
+      .replace(/\s+/g, ''); // Remove all whitespace
 
-  // Decode base64 private key
-  const binaryKey = atob(cleanKey);
-  const keyBytes = new Uint8Array(binaryKey.length);
-  for (let i = 0; i < binaryKey.length; i++) {
-    keyBytes[i] = binaryKey.charCodeAt(i);
+    console.log('Private key cleaned, length:', cleanKey.length);
+    
+    if (!cleanKey || cleanKey.length === 0) {
+      throw new Error('Private key is empty after cleaning');
+    }
+
+    // Decode base64 private key with better error handling
+    let binaryKey: string;
+    try {
+      binaryKey = atob(cleanKey);
+    } catch (e) {
+      console.error('Base64 decode error:', e);
+      throw new Error('Invalid base64 format in private key');
+    }
+
+    const keyBytes = new Uint8Array(binaryKey.length);
+    for (let i = 0; i < binaryKey.length; i++) {
+      keyBytes[i] = binaryKey.charCodeAt(i);
+    }
+
+    // Import key
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      keyBytes.buffer,
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        hash: 'SHA-256',
+      },
+      false,
+      ['sign']
+    );
+
+    // Sign
+    const signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      new TextEncoder().encode(signingInput)
+    );
+
+    const encodedSignature = base64UrlEncode(signature);
+    return `${signingInput}.${encodedSignature}`;
+    
+  } catch (error) {
+    console.error('JWT creation error:', error);
+    throw new Error(`Failed to create JWT: ${error.message}`);
   }
-
-  // Import key
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyBytes.buffer,
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256',
-    },
-    false,
-    ['sign']
-  );
-
-  // Sign
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    new TextEncoder().encode(signingInput)
-  );
-
-  const encodedSignature = base64UrlEncode(signature);
-  return `${signingInput}.${encodedSignature}`;
 }
 
 function base64UrlEncode(data: any): string {

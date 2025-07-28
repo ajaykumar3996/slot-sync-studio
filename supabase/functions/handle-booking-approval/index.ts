@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// Using direct approach instead of SMTP client
+import { Resend } from "npm:resend@2.0.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,39 +54,84 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // If approved, create Google Calendar event
     if (action === 'approve') {
       try {
-        console.log('Starting Google Calendar event creation...');
-        const calendarEvent = await createGoogleCalendarEvent(bookingRequest);
-        console.log('Google Calendar event created successfully:', calendarEvent);
+        console.log('Creating Google Calendar event...');
+        const calendarEventUrl = createGoogleCalendarEventUrl(bookingRequest);
+        console.log('✅ Google Calendar event URL created:', calendarEventUrl);
+        
+        // Automatically redirect user to add event to calendar
+        // We'll send this URL in the confirmation email
       } catch (calendarError) {
-        console.error('Failed to create Google Calendar event:', calendarError);
-        console.error('Calendar error details:', calendarError.message);
-        // Continue with email sending even if calendar creation fails
+        console.error('Failed to create Google Calendar event URL:', calendarError);
       }
     }
 
-    // Send confirmation email to the user
-    const gmailUser = Deno.env.get('GMAIL_USER');
-    const gmailPassword = Deno.env.get('GMAIL_APP_PASSWORD');
+    // Send confirmation email to the user using Resend
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
     
-    if (gmailUser && gmailPassword) {
+    if (resendApiKey) {
       try {
+        const resend = new Resend(resendApiKey);
+        
         const isApproved = action === 'approve';
         const subject = isApproved 
           ? `Booking Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
           : `Booking Request Declined - ${bookingRequest.slot_date}`;
 
         console.log(`Sending ${isApproved ? 'approval' : 'rejection'} email to ${bookingRequest.user_email}`);
-        // For now, just log the email - we'll implement proper sending later
-        console.log(`Email content: ${subject}`);
-        console.log(`To: ${bookingRequest.user_email}`);
-        console.log('Email sending temporarily disabled to avoid SMTP issues');
         
-        console.log('Confirmation email logged successfully');
+        // Create email content with calendar link for approved bookings
+        const calendarSection = isApproved ? `
+          <div style="background: #dcfce7; border: 1px solid #22c55e; padding: 15px; border-radius: 6px; color: #15803d; margin: 20px 0;">
+            <p><strong>✅ Your booking has been confirmed!</strong></p>
+            <p>Click the button below to add this appointment to your Google Calendar:</p>
+            <div style="margin: 15px 0;">
+              <a href="${createGoogleCalendarEventUrl(bookingRequest)}" 
+                 style="background: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;"
+                 target="_blank">
+                📅 Add to Google Calendar
+              </a>
+            </div>
+            <p style="font-size: 14px; color: #666;">Please be available at the scheduled time.</p>
+          </div>
+        ` : `
+          <div style="background: #fef2f2; border: 1px solid #ef4444; padding: 15px; border-radius: 6px; color: #dc2626;">
+            <p><strong>❌ Your booking request has been declined.</strong></p>
+            <p>Please try booking a different time slot that may work better.</p>
+          </div>
+        `;
+
+        const emailResult = await resend.emails.send({
+          from: "ITmate.ai <onboarding@resend.dev>",
+          to: [bookingRequest.user_email],
+          subject,
+          html: `
+            <h2>Booking ${isApproved ? 'Confirmed' : 'Declined'}</h2>
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
+              <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
+              <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
+              <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
+            </div>
+            
+            ${calendarSection}
+            
+            <p style="margin-top: 20px;">
+              Best regards,<br>
+              ITmate.ai Team
+            </p>
+          `,
+        });
+
+        if (emailResult.error) {
+          console.error('Email send failed:', emailResult.error);
+        } else {
+          console.log('✅ Confirmation email sent successfully with calendar link:', emailResult.data);
+        }
       } catch (emailError) {
-        console.error('Error with email:', emailError);
+        console.error('Error sending email:', emailError);
       }
     } else {
-      console.error('Gmail credentials not found in environment variables');
+      console.error('RESEND_API_KEY not found in environment variables');
     }
 
     // Return success page
@@ -191,203 +236,26 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 };
 
-// Function to create Google Calendar event
-async function createGoogleCalendarEvent(bookingRequest: any) {
-  console.log('Getting Google credentials...');
-  const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
-  const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
-  
-  if (!googleClientEmail || !googlePrivateKey) {
-    throw new Error('Google credentials not configured - GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY missing');
-  }
-
-  console.log('Google client email:', googleClientEmail);
-
-  console.log('Getting Google access token...');
-  // Get access token for Google Calendar API
-  const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
-  console.log('Access token obtained successfully');
-  
-  // Parse the booking date and time
+// Function to create Google Calendar event URL (no authentication needed!)
+function createGoogleCalendarEventUrl(bookingRequest: any): string {
   const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
-  const startTime = bookingRequest.slot_start_time; // e.g., "2:00 PM"
-  const endTime = bookingRequest.slot_end_time; // e.g., "3:00 PM"
+  const startTime = bookingRequest.slot_start_time; // e.g., "08:00:00" 
+  const endTime = bookingRequest.slot_end_time; // e.g., "08:30:00"
   
-  // Convert to ISO format with CST timezone
-  const startDateTime = `${eventDate}T${convertToISO(startTime)}-06:00`;
-  const endDateTime = `${eventDate}T${convertToISO(endTime)}-06:00`;
+  // Convert to Google Calendar format (YYYYMMDDTHHMMSSZ)
+  const startDateTime = `${eventDate.replace(/-/g, '')}T${startTime.replace(/:/g, '')}00`;
+  const endDateTime = `${eventDate.replace(/-/g, '')}T${endTime.replace(/:/g, '')}00`;
   
-  const calendarEvent = {
-    summary: `Meeting with ${bookingRequest.user_name}`,
-    description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
-    start: {
-      dateTime: startDateTime,
-      timeZone: 'America/Chicago'
-    },
-    end: {
-      dateTime: endDateTime,
-      timeZone: 'America/Chicago'
-    },
-    attendees: [
-      {
-        email: bookingRequest.user_email,
-        displayName: bookingRequest.user_name
-      }
-    ],
-    reminders: {
-      useDefault: false,
-      overrides: [
-        { method: 'email', minutes: 60 },
-        { method: 'popup', minutes: 15 }
-      ]
-    }
-  };
-
-  // Try primary calendar first, then fallback to service account calendar
-  const calendars = ['primary', googleClientEmail, 'itmate.ai@gmail.com'];
-  let calendarResponse;
-  let lastError;
-  
-  console.log('Attempting to create calendar event on calendars:', calendars);
-  
-  for (const calendarId of calendars) {
-    try {
-      console.log(`Trying calendar: ${calendarId}`);
-      calendarResponse = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(calendarEvent),
-      });
-
-      if (calendarResponse.ok) {
-        const result = await calendarResponse.json();
-        console.log(`✅ Calendar event created successfully on ${calendarId}:`, result.id);
-        return result;
-      } else {
-        const errorData = await calendarResponse.text();
-        lastError = `${calendarResponse.status}: ${errorData}`;
-        console.error(`❌ Failed to create event on ${calendarId}: ${lastError}`);
-        
-        if (calendarId === calendars[calendars.length - 1]) {
-          // Last attempt failed, throw error
-          throw new Error(`Failed to create calendar event on all calendars. Last error: ${lastError}`);
-        }
-        // Continue to next calendar
-      }
-    } catch (error) {
-      lastError = error.message;
-      console.error(`❌ Error with calendar ${calendarId}:`, error.message);
-      if (calendarId === calendars[calendars.length - 1]) {
-        throw new Error(`All calendar attempts failed. Last error: ${lastError}`);
-      }
-    }
-  }
-}
-
-// Helper function to convert time string to ISO format
-function convertToISO(timeStr: string): string {
-  // Convert "2:00 PM" to "14:00:00"
-  const [time, period] = timeStr.split(' ');
-  const [hours, minutes] = time.split(':');
-  let hour24 = parseInt(hours);
-  
-  if (period === 'PM' && hour24 !== 12) {
-    hour24 += 12;
-  } else if (period === 'AM' && hour24 === 12) {
-    hour24 = 0;
-  }
-  
-  return `${hour24.toString().padStart(2, '0')}:${minutes}:00`;
-}
-
-// Google authentication functions
-async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
-  const jwt = await createJWT(clientEmail, privateKey);
-  
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.text();
-    throw new Error(`Failed to get access token: ${response.status} ${errorData}`);
-  }
-
-  const data = await response.json();
-  return data.access_token;
-}
-
-async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  
-  const header = {
-    alg: 'RS256',
-    typ: 'JWT',
-  };
-
-  const payload = {
-    iss: clientEmail,
-    scope: 'https://www.googleapis.com/auth/calendar',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  };
-
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-
-  // Clean the private key
-  const cleanedPrivateKey = privateKey
-    .replace(/\\n/g, '\n')
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\s/g, '');
-
-  // Import the private key
-  const keyData = Uint8Array.from(atob(cleanedPrivateKey), c => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyData,
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256',
-    },
-    false,
-    ['sign']
+  const eventTitle = encodeURIComponent(`Meeting with ${bookingRequest.user_name}`);
+  const eventDescription = encodeURIComponent(
+    `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nMessage: ${bookingRequest.message || 'No message provided'}`
   );
-
-  // Sign the JWT
-  const encoder = new TextEncoder();
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    encoder.encode(signingInput)
-  );
-
-  const encodedSignature = base64UrlEncode(new Uint8Array(signature));
-  return `${signingInput}.${encodedSignature}`;
-}
-
-function base64UrlEncode(data: any): string {
-  let base64;
-  if (typeof data === 'string') {
-    base64 = btoa(data);
-  } else {
-    // For Uint8Array
-    base64 = btoa(String.fromCharCode(...data));
-  }
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  
+  // Create Google Calendar URL
+  const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${eventTitle}&dates=${startDateTime}/${endDateTime}&details=${eventDescription}&ctz=America/Chicago`;
+  
+  console.log('Generated calendar URL:', calendarUrl);
+  return calendarUrl;
 }
 
 serve(serve_handler);

@@ -321,38 +321,37 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
 }
 
 function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
-  // Log slot being checked with consistent CST formatting
+  // Convert slot times to UTC milliseconds for consistent comparison
+  const slotStartUTC = slotStart.getTime();
+  const slotEndUTC = slotEnd.getTime();
+  
+  // Log slot being checked with UTC timestamps and local time display
   const slotStartStr = format(slotStart, 'yyyy-MM-dd h:mm a');
   const slotEndStr = format(slotEnd, 'yyyy-MM-dd h:mm a');
   console.log(`🔍 Checking conflict for slot: ${slotStartStr} - ${slotEndStr}`);
+  console.log(`🕐 Slot UTC timestamps: ${slotStartUTC} - ${slotEndUTC}`);
   
   const conflict = calendarEvents.some(event => {
     if (!event.start || !event.end) return false;
     
-    // Parse Google Calendar event times using date-fns
+    // Parse Google Calendar event times and convert to UTC milliseconds
     const eventStart = parseISO(event.start.dateTime || event.start.date);
     const eventEnd = parseISO(event.end.dateTime || event.end.date);
+    const eventStartUTC = eventStart.getTime();
+    const eventEndUTC = eventEnd.getTime();
     
-    // Log event times in consistent format
+    // Log event times with both display format and UTC timestamps
     const eventStartStr = format(eventStart, 'yyyy-MM-dd h:mm a');
     const eventEndStr = format(eventEnd, 'yyyy-MM-dd h:mm a');
     console.log(`📅 Event "${event.summary}": ${eventStartStr} - ${eventEndStr}`);
+    console.log(`🕐 Event UTC timestamps: ${eventStartUTC} - ${eventEndUTC}`);
     
-    // Use date-fns isWithinInterval for more reliable overlap detection
-    const slotInterval = { start: slotStart, end: slotEnd };
-    const eventInterval = { start: eventStart, end: eventEnd };
-    
-    // Check if either event or slot is within the other's interval
-    const eventStartInSlot = isWithinInterval(eventStart, slotInterval);
-    const eventEndInSlot = isWithinInterval(eventEnd, slotInterval);
-    const slotStartInEvent = isWithinInterval(slotStart, eventInterval);
-    const slotEndInEvent = isWithinInterval(slotEnd, eventInterval);
-    
-    const hasOverlap = eventStartInSlot || eventEndInSlot || slotStartInEvent || slotEndInEvent ||
-                      (eventStart <= slotStart && eventEnd >= slotEnd) || 
-                      (slotStart <= eventStart && slotEnd >= eventEnd);
+    // Simple overlap detection using UTC milliseconds
+    // Two intervals overlap if: (slotStart < eventEnd) AND (slotEnd > eventStart)
+    const hasOverlap = (slotStartUTC < eventEndUTC) && (slotEndUTC > eventStartUTC);
     
     if (hasOverlap) {
+      console.log(`❌ CONFLICT DETECTED: Slot (${slotStartUTC}-${slotEndUTC}) overlaps with "${event.summary}" (${eventStartUTC}-${eventEndUTC})`);
       console.log(`❌ CONFLICT: Slot ${slotStartStr} - ${slotEndStr} overlaps with "${event.summary}" ${eventStartStr} - ${eventEndStr}`);
       return true;
     }

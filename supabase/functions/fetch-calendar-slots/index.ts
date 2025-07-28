@@ -45,50 +45,56 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // Get access token for Google Calendar API
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     
-    // Since the approval function creates events on 'primary' calendar successfully,
-    // let's focus only on that calendar to ensure consistency
-    console.log('🎯 Fetching events from primary calendar only');
+    // Use the calendar that actually has events (based on logs: itmate.ai@gmail.com)
+    const calendarAttempts = [
+      'itmate.ai@gmail.com',
+      'primary', 
+      googleClientEmail
+    ];
+    
+    console.log('🎯 Fetching events from calendars:', calendarAttempts);
     
     let allEvents: any[] = [];
+    let successfulCalendar = null;
     
-    try {
-      const response = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-        `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        allEvents = data.items || [];
+    // Try each calendar until we find one that works
+    for (const calendarId of calendarAttempts) {
+      try {
+        console.log(`📍 Trying calendar: ${calendarId}`);
         
-        // Return a simple response for now to test if this works
-        return new Response(
-          JSON.stringify({ 
-            message: `Found ${allEvents.length} events in primary calendar`,
-            events: allEvents.map(e => ({ 
-              summary: e.summary, 
-              start: e.start, 
-              end: e.end 
-            })),
-            slots: [] // Temporarily return empty slots to see if events are found
-          }), 
-          { 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        const response = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+          `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
           }
         );
-      } else {
-        const errorText = await response.text();
-        throw new Error(`Calendar API error: ${response.status} - ${errorText}`);
+
+        if (response.ok) {
+          const data = await response.json();
+          const events = data.items || [];
+          console.log(`✅ Found ${events.length} events in calendar: ${calendarId}`);
+          
+          if (events.length > 0) {
+            allEvents = events;
+            successfulCalendar = calendarId;
+            console.log('📅 Events found:', events.map(event => ({
+              summary: event.summary,
+              start: event.start,
+              end: event.end
+            })));
+            break; // Use the first calendar that has events
+          }
+        }
+      } catch (error) {
+        console.error(`💥 Exception with calendar ${calendarId}:`, error.message);
       }
-    } catch (error) {
-      throw new Error(`Failed to fetch calendar events: ${error.message}`);
     }
+    
+    console.log(`📊 Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
     const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);

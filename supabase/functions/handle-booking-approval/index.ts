@@ -51,17 +51,16 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     console.log(`Booking ${bookingRequest.id} ${newStatus}`);
 
-    // If approved, create Google Calendar event
+    // If approved, create Google Calendar event automatically
     if (action === 'approve') {
       try {
-        console.log('Creating Google Calendar event...');
-        const calendarEventUrl = createGoogleCalendarEventUrl(bookingRequest);
-        console.log('✅ Google Calendar event URL created:', calendarEventUrl);
-        
-        // Automatically redirect user to add event to calendar
-        // We'll send this URL in the confirmation email
+        console.log('Creating automatic Google Calendar event...');
+        const calendarEvent = await createGoogleCalendarEvent(bookingRequest);
+        console.log('✅ Google Calendar event created automatically:', calendarEvent.id, calendarEvent.htmlLink);
       } catch (calendarError) {
-        console.error('Failed to create Google Calendar event URL:', calendarError);
+        console.error('❌ Failed to create automatic Google Calendar event:', calendarError);
+        console.error('Error details:', calendarError.message);
+        // Continue with email sending even if calendar creation fails
       }
     }
 
@@ -236,7 +235,215 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 };
 
-// Function to create Google Calendar event URL (no authentication needed!)
+// Function to create Google Calendar event automatically
+async function createGoogleCalendarEvent(bookingRequest: any) {
+  console.log('🔑 Getting Google credentials...');
+  const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
+  const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
+  
+  if (!googleClientEmail || !googlePrivateKey) {
+    throw new Error('❌ Google credentials not configured - GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY missing');
+  }
+
+  console.log('📧 Using Google client email:', googleClientEmail);
+
+  // Get access token for Google Calendar API
+  console.log('🔐 Getting Google access token...');
+  const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
+  console.log('✅ Access token obtained successfully');
+  
+  // Parse the booking date and time
+  const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
+  const startTime = bookingRequest.slot_start_time; // e.g., "08:00:00"
+  const endTime = bookingRequest.slot_end_time; // e.g., "08:30:00"
+  
+  console.log('📅 Event details:', { eventDate, startTime, endTime });
+  
+  // Convert to ISO format with CST timezone
+  const startDateTime = `${eventDate}T${startTime}-06:00`;
+  const endDateTime = `${eventDate}T${endTime}-06:00`;
+  
+  console.log('🕐 Converted times:', { startDateTime, endDateTime });
+  
+  const calendarEvent = {
+    summary: `Meeting with ${bookingRequest.user_name}`,
+    description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
+    start: {
+      dateTime: startDateTime,
+      timeZone: 'America/Chicago'
+    },
+    end: {
+      dateTime: endDateTime,
+      timeZone: 'America/Chicago'
+    },
+    attendees: [
+      {
+        email: bookingRequest.user_email,
+        displayName: bookingRequest.user_name
+      }
+    ],
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'email', minutes: 60 },
+        { method: 'popup', minutes: 15 }
+      ]
+    }
+  };
+
+  console.log('📋 Calendar event object created:', JSON.stringify(calendarEvent, null, 2));
+
+  // Try different calendar approaches
+  const calendarAttempts = [
+    'itmate.ai@gmail.com',
+    'primary', 
+    googleClientEmail
+  ];
+  
+  console.log('🎯 Attempting to create event on calendars:', calendarAttempts);
+  
+  for (const calendarId of calendarAttempts) {
+    try {
+      console.log(`📍 Trying calendar: ${calendarId}`);
+      
+      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(calendarEvent),
+      });
+
+      console.log(`📡 API Response for ${calendarId}:`, response.status, response.statusText);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`🎉 SUCCESS! Calendar event created on ${calendarId}:`, {
+          id: result.id,
+          htmlLink: result.htmlLink,
+          status: result.status
+        });
+        return result;
+      } else {
+        const errorData = await response.text();
+        console.error(`❌ Failed on ${calendarId} (${response.status}):`, errorData);
+        
+        // If this is the last calendar, throw the error
+        if (calendarId === calendarAttempts[calendarAttempts.length - 1]) {
+          throw new Error(`All calendar attempts failed. Final error: ${response.status} - ${errorData}`);
+        }
+      }
+    } catch (fetchError) {
+      console.error(`💥 Exception with calendar ${calendarId}:`, fetchError.message);
+      
+      // If this is the last calendar, throw the error
+      if (calendarId === calendarAttempts[calendarAttempts.length - 1]) {
+        throw new Error(`All calendar attempts failed. Final exception: ${fetchError.message}`);
+      }
+    }
+  }
+}
+
+// Google authentication functions
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  console.log('🔧 Creating JWT...');
+  const jwt = await createJWT(clientEmail, privateKey);
+  console.log('📝 JWT created successfully');
+  
+  console.log('🌐 Requesting access token from Google...');
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    }),
+  });
+
+  console.log('📡 Token response status:', response.status);
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.error('❌ Token request failed:', errorData);
+    throw new Error(`Failed to get access token: ${response.status} ${errorData}`);
+  }
+
+  const data = await response.json();
+  console.log('✅ Access token received');
+  return data.access_token;
+}
+
+async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT',
+  };
+
+  const payload = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/calendar',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  // Clean the private key
+  console.log('🔑 Processing private key...');
+  const cleanedPrivateKey = privateKey
+    .replace(/\\n/g, '\n')
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s/g, '');
+
+  console.log('🔑 Private key length after cleaning:', cleanedPrivateKey.length);
+
+  // Import the private key
+  const keyData = Uint8Array.from(atob(cleanedPrivateKey), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyData,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    },
+    false,
+    ['sign']
+  );
+
+  // Sign the JWT
+  const encoder = new TextEncoder();
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    encoder.encode(signingInput)
+  );
+
+  const encodedSignature = base64UrlEncode(new Uint8Array(signature));
+  console.log('✅ JWT signed successfully');
+  return `${signingInput}.${encodedSignature}`;
+}
+
+function base64UrlEncode(data: any): string {
+  let base64;
+  if (typeof data === 'string') {
+    base64 = btoa(data);
+  } else {
+    // For Uint8Array
+    base64 = btoa(String.fromCharCode(...data));
+  }
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// Helper function to create Google Calendar URL for manual addition (fallback)
 function createGoogleCalendarEventUrl(bookingRequest: any): string {
   const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
   const startTime = bookingRequest.slot_start_time; // e.g., "08:00:00" 
@@ -254,7 +461,6 @@ function createGoogleCalendarEventUrl(bookingRequest: any): string {
   // Create Google Calendar URL
   const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${eventTitle}&dates=${startDateTime}/${endDateTime}&details=${eventDescription}&ctz=America/Chicago`;
   
-  console.log('Generated calendar URL:', calendarUrl);
   return calendarUrl;
 }
 

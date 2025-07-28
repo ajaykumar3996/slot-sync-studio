@@ -246,35 +246,39 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
         const month = date.getMonth();
         const day = date.getDate();
         
-        // Create the slot start time in CST
+        // Create the slot start time in CST (UTC-6/UTC-5)
+        // We need to create the time in CST timezone, not local browser timezone
         const slotStart = new Date();
         slotStart.setFullYear(year, month, day);
         slotStart.setHours(hour, minutes, 0, 0);
         
+        // Convert to CST by adjusting for timezone offset
+        // CST is UTC-6 (standard) or UTC-5 (daylight saving)
+        const cstOffset = 6 * 60; // CST is UTC-6
+        const localOffset = slotStart.getTimezoneOffset();
+        const cstTime = new Date(slotStart.getTime() + (localOffset - cstOffset) * 60000);
+        
         // Check both 30-minute and 60-minute slots
         [30, 60].forEach(duration => {
-          const slotEnd = new Date(slotStart);
+          const slotEnd = new Date(cstTime);
           slotEnd.setMinutes(slotEnd.getMinutes() + duration);
           
-          // Don't create 60-minute slots that would go past 6 PM
-          if (duration === 60 && slotEnd.getHours() >= 18) return;
+          // Don't create 60-minute slots that would go past 6 PM CST
+          if (duration === 60 && hour >= 17) return;
           
-          const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
+          const isAvailable = !hasConflict(calendarEvents, cstTime, slotEnd);
           
-          // Format times properly in CST
-          const startTimeStr = slotStart.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit',
-            hour12: true,
-            timeZone: 'America/Chicago'
-          });
+          // Format times in CST manually to ensure correct display
+          const startHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+          const endHour = hour + Math.floor((minutes + duration) / 60);
+          const endMinute = (minutes + duration) % 60;
+          const displayEndHour = endHour === 0 ? 12 : endHour > 12 ? endHour - 12 : endHour;
           
-          const endTimeStr = slotEnd.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit',
-            hour12: true,
-            timeZone: 'America/Chicago'
-          });
+          const startAmPm = hour < 12 ? 'AM' : 'PM';
+          const endAmPm = endHour < 12 ? 'AM' : 'PM';
+          
+          const startTimeStr = `${startHour}:${minutes.toString().padStart(2, '0')} ${startAmPm}`;
+          const endTimeStr = `${displayEndHour}:${endMinute.toString().padStart(2, '0')} ${endAmPm}`;
           
           slots.push({
             id: `${date.toISOString().split('T')[0]}-${hour}-${minutes}-${duration}`,

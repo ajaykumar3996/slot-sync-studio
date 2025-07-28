@@ -100,6 +100,38 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     console.log('Email sent successfully:', emailResponse);
 
+    // Send immediate confirmation email to the user
+    const userConfirmationEmail = await resend.emails.send({
+      from: "Booking System <onboarding@resend.dev>",
+      to: [bookingData.user_email],
+      subject: `Booking Request Received - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
+      html: `
+        <h2>Booking Request Received</h2>
+        <p>Dear ${bookingData.user_name},</p>
+        <p>We have received your booking request and it is currently being reviewed.</p>
+        
+        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3>Your Booking Details</h3>
+          <p><strong>Date:</strong> ${bookingData.slot_date}</p>
+          <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
+          <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
+          ${bookingData.message ? `<p><strong>Your Message:</strong> ${bookingData.message}</p>` : ''}
+        </div>
+        
+        <div style="background: #e0f2fe; border: 1px solid #0284c7; padding: 15px; border-radius: 6px; color: #075985;">
+          <p><strong>📋 What happens next?</strong></p>
+          <p>Your request will be reviewed and you will receive a confirmation email within 24 hours letting you know if your booking has been approved or if we need to suggest an alternative time.</p>
+        </div>
+        
+        <p style="margin-top: 20px;">
+          Best regards,<br>
+          ITmate.ai Team
+        </p>
+      `,
+    });
+
+    console.log('User confirmation email sent:', userConfirmationEmail);
+
     return new Response(
       JSON.stringify({ 
         success: true, 

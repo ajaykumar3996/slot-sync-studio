@@ -51,6 +51,17 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     console.log(`Booking ${bookingRequest.id} ${newStatus}`);
 
+    // If approved, create Google Calendar event
+    if (action === 'approve') {
+      try {
+        await createGoogleCalendarEvent(bookingRequest);
+        console.log('Google Calendar event created successfully');
+      } catch (calendarError) {
+        console.error('Failed to create Google Calendar event:', calendarError);
+        // Continue with email sending even if calendar creation fails
+      }
+    }
+
     // Send confirmation email to the user
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (resendApiKey) {
@@ -207,5 +218,168 @@ const serve_handler = async (req: Request): Promise<Response> => {
     );
   }
 };
+
+// Function to create Google Calendar event
+async function createGoogleCalendarEvent(bookingRequest: any) {
+  const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
+  const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
+  
+  if (!googleClientEmail || !googlePrivateKey) {
+    throw new Error('Google credentials not configured');
+  }
+
+  // Get access token for Google Calendar API
+  const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
+  
+  // Parse the booking date and time
+  const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
+  const startTime = bookingRequest.slot_start_time; // e.g., "2:00 PM"
+  const endTime = bookingRequest.slot_end_time; // e.g., "3:00 PM"
+  
+  // Convert to ISO format with CST timezone
+  const startDateTime = `${eventDate}T${convertToISO(startTime)}-06:00`;
+  const endDateTime = `${eventDate}T${convertToISO(endTime)}-06:00`;
+  
+  const calendarEvent = {
+    summary: `Meeting with ${bookingRequest.user_name}`,
+    description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
+    start: {
+      dateTime: startDateTime,
+      timeZone: 'America/Chicago'
+    },
+    end: {
+      dateTime: endDateTime,
+      timeZone: 'America/Chicago'
+    },
+    attendees: [
+      {
+        email: bookingRequest.user_email,
+        displayName: bookingRequest.user_name
+      }
+    ]
+  };
+
+  const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/itmate.ai@gmail.com/events', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(calendarEvent),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    console.error('Google Calendar API error:', errorData);
+    throw new Error(`Failed to create calendar event: ${response.status} ${errorData}`);
+  }
+
+  const result = await response.json();
+  console.log('Calendar event created:', result);
+  return result;
+}
+
+// Helper function to convert time string to ISO format
+function convertToISO(timeStr: string): string {
+  // Convert "2:00 PM" to "14:00:00"
+  const [time, period] = timeStr.split(' ');
+  const [hours, minutes] = time.split(':');
+  let hour24 = parseInt(hours);
+  
+  if (period === 'PM' && hour24 !== 12) {
+    hour24 += 12;
+  } else if (period === 'AM' && hour24 === 12) {
+    hour24 = 0;
+  }
+  
+  return `${hour24.toString().padStart(2, '0')}:${minutes}:00`;
+}
+
+// Google authentication functions
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  const jwt = await createJWT(clientEmail, privateKey);
+  
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    throw new Error(`Failed to get access token: ${response.status} ${errorData}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
+async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT',
+  };
+
+  const payload = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/calendar',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  // Clean the private key
+  const cleanedPrivateKey = privateKey
+    .replace(/\\n/g, '\n')
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s/g, '');
+
+  // Import the private key
+  const keyData = Uint8Array.from(atob(cleanedPrivateKey), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyData,
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    },
+    false,
+    ['sign']
+  );
+
+  // Sign the JWT
+  const encoder = new TextEncoder();
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    encoder.encode(signingInput)
+  );
+
+  const encodedSignature = base64UrlEncode(new Uint8Array(signature));
+  return `${signingInput}.${encodedSignature}`;
+}
+
+function base64UrlEncode(data: any): string {
+  let base64;
+  if (typeof data === 'string') {
+    base64 = btoa(data);
+  } else {
+    // For Uint8Array
+    base64 = btoa(String.fromCharCode(...data));
+  }
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
 
 serve(serve_handler);

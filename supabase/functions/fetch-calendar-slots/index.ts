@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { parseISO, format, isWithinInterval, addMinutes } from "https://esm.sh/date-fns@3.6.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -271,66 +272,41 @@ async function fetchGoogleCalendarEvents(
 
 function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
   
   // Generate slots for each day between start and end date
-  for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+  for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
     // Skip weekends
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
+    if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
     
     // Generate slots from 8 AM to 6 PM CST
     for (let hour = 8; hour < 18; hour++) {
-      // Generate 30-minute slots
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        // Create slot times in CDT timezone (matches Google Calendar)
-        // Format: YYYY-MM-DDTHH:MM:SS-05:00 (CDT is UTC-5, CST is UTC-6)
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hourStr = String(hour).padStart(2, '0');
-        const minuteStr = String(minutes).padStart(2, '0');
-        
-        // Create CDT datetime strings (UTC-5) to match Google Calendar timezone
-        const slotStartCDT = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00-05:00`;
+        // Use date-fns to create proper Date objects for the slot times
+        const baseDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+        const slotStart = new Date(baseDate.getTime() + (hour * 60 + minutes) * 60 * 1000);
         
         // Check both 30-minute and 60-minute slots
         [30, 60].forEach(duration => {
-          const endMinutes = minutes + duration;
-          const endHour = hour + Math.floor(endMinutes / 60);
-          const finalMinutes = endMinutes % 60;
+          const slotEnd = addMinutes(slotStart, duration);
           
-          // Don't create 60-minute slots that would go past 6 PM CST
-          if (duration === 60 && endHour > 18) return;
-          
-          const endHourStr = String(endHour).padStart(2, '0');
-          const endMinuteStr = String(finalMinutes).padStart(2, '0');
-          const slotEndCDT = `${year}-${month}-${day}T${endHourStr}:${endMinuteStr}:00-05:00`;
-          
-          // Convert to Date objects for conflict checking
-          const slotStart = new Date(slotStartCDT);
-          const slotEnd = new Date(slotEndCDT);
+          // Don't create 60-minute slots that would go past 6 PM
+          if (duration === 60 && slotEnd.getHours() >= 18) return;
           
           const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
           
-          // Format display times in 12-hour format
-          const displayStartHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-          const displayEndHour = endHour === 0 ? 12 : endHour > 12 ? endHour - 12 : endHour;
+          // Format display times in 12-hour format using date-fns
+          const startTimeStr = format(slotStart, 'h:mm a');
+          const endTimeStr = format(slotEnd, 'h:mm a');
           
-          const startAmPm = hour < 12 ? 'AM' : 'PM';
-          const endAmPm = endHour < 12 ? 'AM' : 'PM';
-          
-          const startTimeStr = `${displayStartHour}:${minutes.toString().padStart(2, '0')} ${startAmPm}`;
-          const endTimeStr = `${displayEndHour}:${finalMinutes.toString().padStart(2, '0')} ${endAmPm}`;
-          
-          // Debug logging for conflict detection
-          if (!isAvailable) {
-            console.log(`❌ SLOT BLOCKED: ${year}-${month}-${day} ${startTimeStr} - ${endTimeStr} (${duration}min)`);
-          }
+          // Enhanced debug logging
+          const slotDateStr = format(slotStart, 'yyyy-MM-dd');
+          console.log(`🎯 SLOT: ${slotDateStr} ${startTimeStr} - ${endTimeStr} (${duration}min) - ${isAvailable ? 'AVAILABLE' : 'BLOCKED'}`);
           
           slots.push({
-            id: `${year}-${month}-${day}-${hour}-${minutes}-${duration}`,
-            date: new Date(year, date.getMonth(), date.getDate()),
+            id: `${slotDateStr}-${hour}-${minutes}-${duration}`,
+            date: new Date(baseDate),
             startTime: startTimeStr,
             endTime: endTimeStr,
             isAvailable,
@@ -345,21 +321,39 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
 }
 
 function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
-  console.log(`🔍 Checking conflict for slot: ${slotStart.toISOString()} - ${slotEnd.toISOString()}`);
+  // Log slot being checked with consistent CST formatting
+  const slotStartStr = format(slotStart, 'yyyy-MM-dd h:mm a');
+  const slotEndStr = format(slotEnd, 'yyyy-MM-dd h:mm a');
+  console.log(`🔍 Checking conflict for slot: ${slotStartStr} - ${slotEndStr}`);
   
   const conflict = calendarEvents.some(event => {
     if (!event.start || !event.end) return false;
     
-    const eventStart = new Date(event.start.dateTime || event.start.date);
-    const eventEnd = new Date(event.end.dateTime || event.end.date);
+    // Parse Google Calendar event times using date-fns
+    const eventStart = parseISO(event.start.dateTime || event.start.date);
+    const eventEnd = parseISO(event.end.dateTime || event.end.date);
     
-    console.log(`📅 Comparing with event "${event.summary}": ${eventStart.toISOString()} - ${eventEnd.toISOString()}`);
+    // Log event times in consistent format
+    const eventStartStr = format(eventStart, 'yyyy-MM-dd h:mm a');
+    const eventEndStr = format(eventEnd, 'yyyy-MM-dd h:mm a');
+    console.log(`📅 Event "${event.summary}": ${eventStartStr} - ${eventEndStr}`);
     
-    // Check if slot overlaps with any existing event
-    const hasOverlap = slotStart < eventEnd && slotEnd > eventStart;
+    // Use date-fns isWithinInterval for more reliable overlap detection
+    const slotInterval = { start: slotStart, end: slotEnd };
+    const eventInterval = { start: eventStart, end: eventEnd };
+    
+    // Check if either event or slot is within the other's interval
+    const eventStartInSlot = isWithinInterval(eventStart, slotInterval);
+    const eventEndInSlot = isWithinInterval(eventEnd, slotInterval);
+    const slotStartInEvent = isWithinInterval(slotStart, eventInterval);
+    const slotEndInEvent = isWithinInterval(slotEnd, eventInterval);
+    
+    const hasOverlap = eventStartInSlot || eventEndInSlot || slotStartInEvent || slotEndInEvent ||
+                      (eventStart <= slotStart && eventEnd >= slotEnd) || 
+                      (slotStart <= eventStart && slotEnd >= eventEnd);
     
     if (hasOverlap) {
-      console.log(`❌ CONFLICT DETECTED: Slot ${slotStart.toISOString()} - ${slotEnd.toISOString()} overlaps with "${event.summary}" ${eventStart.toISOString()} - ${eventEnd.toISOString()}`);
+      console.log(`❌ CONFLICT: Slot ${slotStartStr} - ${slotEndStr} overlaps with "${event.summary}" ${eventStartStr} - ${eventEndStr}`);
       return true;
     }
     
@@ -367,7 +361,7 @@ function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boo
   });
   
   if (!conflict) {
-    console.log(`✅ No conflict found for slot: ${slotStart.toISOString()} - ${slotEnd.toISOString()}`);
+    console.log(`✅ AVAILABLE: ${slotStartStr} - ${slotEndStr}`);
   }
   
   return conflict;

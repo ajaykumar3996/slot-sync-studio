@@ -45,34 +45,44 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // Get access token for Google Calendar API
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     
-    // Fetch events from Google Calendar - using the same calendar as approval function
-    const calendarEvents = await fetchGoogleCalendarEvents(
-      accessToken, 
-      'primary', // Try primary first
-      startDate, 
-      endDate
-    );
+    // Fetch events from Google Calendar - try all calendars that approval function uses
+    const calendarAttempts = [
+      'itmate.ai@gmail.com',
+      'primary', 
+      googleClientEmail
+    ];
     
-    console.log(`Found ${calendarEvents.length} events in Google Calendar (primary)`);
+    console.log('🎯 Fetching events from calendars:', calendarAttempts);
     
-    // If no events found in primary, try the service account email calendar
-    let allEvents = calendarEvents;
-    if (calendarEvents.length === 0) {
-      const serviceAccountEvents = await fetchGoogleCalendarEvents(
-        accessToken, 
-        googleClientEmail, // Try service account calendar
-        startDate, 
-        endDate
-      );
-      allEvents = serviceAccountEvents;
-      console.log(`Found ${serviceAccountEvents.length} events in service account calendar`);
+    let allEvents: any[] = [];
+    
+    for (const calendarId of calendarAttempts) {
+      try {
+        console.log(`📍 Trying calendar: ${calendarId}`);
+        
+        const calendarEvents = await fetchGoogleCalendarEvents(
+          accessToken, 
+          calendarId,
+          startDate, 
+          endDate
+        );
+        
+        console.log(`Found ${calendarEvents.length} events in calendar: ${calendarId}`);
+        
+        if (calendarEvents.length > 0) {
+          allEvents = allEvents.concat(calendarEvents);
+          console.log('Calendar events from', calendarId, ':', JSON.stringify(calendarEvents.map(event => ({
+            summary: event.summary,
+            start: event.start,
+            end: event.end
+          })), null, 2));
+        }
+      } catch (error) {
+        console.error(`❌ Failed to fetch from calendar ${calendarId}:`, error.message);
+      }
     }
     
-    console.log('Calendar events:', JSON.stringify(allEvents.map(event => ({
-      summary: event.summary,
-      start: event.start,
-      end: event.end
-    })), null, 2));
+    console.log(`📊 Total events found across all calendars: ${allEvents.length}`);
     const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);
@@ -299,6 +309,11 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
           
           const startTimeStr = `${startHour}:${minutes.toString().padStart(2, '0')} ${startAmPm}`;
           const endTimeStr = `${displayEndHour}:${endMinute.toString().padStart(2, '0')} ${endAmPm}`;
+          
+          // Debug logging for conflict detection
+          if (!isAvailable) {
+            console.log(`❌ SLOT BLOCKED: ${date.toISOString().split('T')[0]} ${startTimeStr} - ${endTimeStr} (${duration}min)`);
+          }
           
           slots.push({
             id: `${date.toISOString().split('T')[0]}-${hour}-${minutes}-${duration}`,

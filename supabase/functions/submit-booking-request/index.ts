@@ -66,7 +66,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
     const emailResponse = await resend.emails.send({
-      from: "ITmate.ai Booking <itmate.ai@gmail.com>",
+      from: "ITmate.ai <onboarding@resend.dev>",
       to: ["itmate.ai@gmail.com"],
       subject: `New Booking Request - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
       html: `
@@ -102,7 +102,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     // Send immediate confirmation email to the user
     const userConfirmationEmail = await resend.emails.send({
-      from: "ITmate.ai Booking <itmate.ai@gmail.com>",
+      from: "ITmate.ai <onboarding@resend.dev>",
       to: [bookingData.user_email],
       subject: `Booking Request Received - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
       html: `

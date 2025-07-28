@@ -303,6 +303,7 @@ function hasConflict(
     const hasOverlap = slotStartTime < eventEndTime - 1 && slotEndTime > eventStartTime + 1;
     
     if (hasOverlap) {
+      console.log(`   Event that has a conflict: ${event}`);
       console.log(`🚨 CONFLICT DETECTED for ${slotKey} on ${dateStr}`);
       console.log(`   Slot: ${slotStartStr} to ${slotEndStr}`);
       console.log(`   Event: ${event.summary || 'Untitled'} (${eventStartStr} to ${eventEndStr})`);

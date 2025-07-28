@@ -45,7 +45,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // Get access token for Google Calendar API
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     
-    // Fetch events from Google Calendar - try all calendars that approval function uses
+    // Use the same calendar logic as the approval function - try calendars in same order
     const calendarAttempts = [
       'itmate.ai@gmail.com',
       'primary', 
@@ -55,34 +55,52 @@ const serve_handler = async (req: Request): Promise<Response> => {
     console.log('🎯 Fetching events from calendars:', calendarAttempts);
     
     let allEvents: any[] = [];
+    let successfulCalendar = null;
     
+    // Try each calendar until we find one that works (same logic as approval function)
     for (const calendarId of calendarAttempts) {
       try {
         console.log(`📍 Trying calendar: ${calendarId}`);
         
-        const calendarEvents = await fetchGoogleCalendarEvents(
-          accessToken, 
-          calendarId,
-          startDate, 
-          endDate
+        const response = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+          `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          }
         );
-        
-        console.log(`Found ${calendarEvents.length} events in calendar: ${calendarId}`);
-        
-        if (calendarEvents.length > 0) {
-          allEvents = allEvents.concat(calendarEvents);
-          console.log('Calendar events from', calendarId, ':', JSON.stringify(calendarEvents.map(event => ({
-            summary: event.summary,
-            start: event.start,
-            end: event.end
-          })), null, 2));
+
+        console.log(`📡 API Response for ${calendarId}: ${response.status} ${response.statusText}`);
+
+        if (response.ok) {
+          const data = await response.json();
+          const events = data.items || [];
+          console.log(`✅ SUCCESS! Found ${events.length} events in calendar: ${calendarId}`);
+          
+          if (events.length > 0) {
+            console.log('📅 Events found:', JSON.stringify(events.map(event => ({
+              summary: event.summary,
+              start: event.start,
+              end: event.end
+            })), null, 2));
+            
+            allEvents = events;
+            successfulCalendar = calendarId;
+            break; // Use the first calendar that has events
+          }
+        } else {
+          const errorData = await response.text();
+          console.error(`❌ Failed on ${calendarId} (${response.status}): ${errorData}`);
         }
       } catch (error) {
-        console.error(`❌ Failed to fetch from calendar ${calendarId}:`, error.message);
+        console.error(`💥 Exception with calendar ${calendarId}:`, error.message);
       }
     }
     
-    console.log(`📊 Total events found across all calendars: ${allEvents.length}`);
+    console.log(`📊 Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
     const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);
@@ -147,7 +165,7 @@ async function createJWT(clientEmail: string, privateKey: string): Promise<strin
 
   const payload = {
     iss: clientEmail,
-    scope: 'https://www.googleapis.com/auth/calendar.readonly',
+    scope: 'https://www.googleapis.com/auth/calendar', // Full calendar access, not just readonly
     aud: 'https://oauth2.googleapis.com/token',
     exp: now + 3600,
     iat: now,

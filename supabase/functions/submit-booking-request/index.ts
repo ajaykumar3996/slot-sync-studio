@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "npm:resend@2.0.0";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,23 +53,35 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     console.log('Booking request saved with ID:', bookingRequest.id);
 
-    // Send email notification to itmate.ai@gmail.com
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    if (!resendApiKey) {
-      console.error('RESEND_API_KEY not configured');
+    // Send email notification to itmate.ai@gmail.com using Gmail SMTP
+    const gmailUser = Deno.env.get('GMAIL_USER');
+    const gmailPassword = Deno.env.get('GMAIL_APP_PASSWORD');
+    
+    if (!gmailUser || !gmailPassword) {
+      console.error('Gmail SMTP credentials not configured');
       throw new Error('Email service not configured');
     }
 
-    const resend = new Resend(resendApiKey);
+    const client = new SMTPClient({
+      connection: {
+        hostname: "smtp.gmail.com",
+        port: 587,
+        tls: true,
+        auth: {
+          username: gmailUser,
+          password: gmailPassword,
+        },
+      },
+    });
     
     const approvalUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
     const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
-    const emailResponse = await resend.emails.send({
-      from: "ITmate.ai <onboarding@resend.dev>",
-      to: ["itmate.ai@gmail.com"],
+    await client.send({
+      from: gmailUser,
+      to: "itmate.ai@gmail.com",
       subject: `New Booking Request - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
-      html: `
+      content: `
         <h2>New Booking Request</h2>
         <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3>Booking Details</h3>
@@ -98,14 +110,14 @@ const serve_handler = async (req: Request): Promise<Response> => {
       `,
     });
 
-    console.log('Email sent successfully:', emailResponse);
+    console.log('Approval email sent successfully');
 
     // Send immediate confirmation email to the user
-    const userConfirmationEmail = await resend.emails.send({
-      from: "ITmate.ai <onboarding@resend.dev>",
-      to: [bookingData.user_email],
+    await client.send({
+      from: gmailUser,
+      to: bookingData.user_email,
       subject: `Booking Request Received - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
-      html: `
+      content: `
         <h2>Booking Request Received</h2>
         <p>Dear ${bookingData.user_name},</p>
         <p>We have received your booking request and it is currently being reviewed.</p>
@@ -130,7 +142,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
       `,
     });
 
-    console.log('User confirmation email sent:', userConfirmationEmail);
+    await client.close();
+    console.log('User confirmation email sent successfully');
 
     return new Response(
       JSON.stringify({ 

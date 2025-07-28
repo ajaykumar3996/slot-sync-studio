@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "npm:resend@2.0.0";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,22 +62,34 @@ const serve_handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // Send confirmation email to the user
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    if (resendApiKey) {
+    // Send confirmation email to the user using Gmail SMTP
+    const gmailUser = Deno.env.get('GMAIL_USER');
+    const gmailPassword = Deno.env.get('GMAIL_APP_PASSWORD');
+    
+    if (gmailUser && gmailPassword) {
       try {
-        const resend = new Resend(resendApiKey);
+        const client = new SMTPClient({
+          connection: {
+            hostname: "smtp.gmail.com",
+            port: 587,
+            tls: true,
+            auth: {
+              username: gmailUser,
+              password: gmailPassword,
+            },
+          },
+        });
         
         const isApproved = action === 'approve';
         const subject = isApproved 
           ? `Booking Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
           : `Booking Request Declined - ${bookingRequest.slot_date}`;
 
-        const emailResult = await resend.emails.send({
-          from: "ITmate.ai <onboarding@resend.dev>",
-          to: [bookingRequest.user_email],
+        await client.send({
+          from: gmailUser,
+          to: bookingRequest.user_email,
           subject,
-          html: `
+          content: `
             <h2>Booking ${isApproved ? 'Confirmed' : 'Declined'}</h2>
             <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
               <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
@@ -105,16 +117,13 @@ const serve_handler = async (req: Request): Promise<Response> => {
           `,
         });
 
-        if (emailResult.error) {
-          console.error('Email send failed:', emailResult.error);
-        } else {
-          console.log('Confirmation email sent successfully:', emailResult.data);
-        }
+        await client.close();
+        console.log('Confirmation email sent successfully');
       } catch (emailError) {
         console.error('Error sending email:', emailError);
       }
     } else {
-      console.error('RESEND_API_KEY not found in environment variables');
+      console.error('Gmail SMTP credentials not found in environment variables');
     }
 
     // Return success page

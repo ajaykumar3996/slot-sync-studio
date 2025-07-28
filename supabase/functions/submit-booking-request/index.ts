@@ -66,7 +66,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
     const emailResponse = await resend.emails.send({
-      from: "Booking System <bookings@resend.dev>",
+      from: "Booking System <onboarding@resend.dev>",
       to: ["itmate.ai@gmail.com"],
       subject: `New Booking Request - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
       html: `

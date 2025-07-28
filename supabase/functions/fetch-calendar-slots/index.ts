@@ -237,7 +237,7 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
     // Skip weekends
     if (date.getDay() === 0 || date.getDay() === 6) continue;
     
-    // Generate slots from 8 AM to 6 PM CST
+    // Generate slots from 8 AM to 6 PM CST (adjust for timezone)
     for (let hour = 8; hour < 18; hour++) {
       // Generate 30-minute slots
       for (let minutes = 0; minutes < 60; minutes += 30) {
@@ -260,11 +260,13 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
             startTime: slotStart.toLocaleTimeString('en-US', { 
               hour: '2-digit', 
               minute: '2-digit',
+              hour12: true,
               timeZone: 'America/Chicago'
             }),
             endTime: slotEnd.toLocaleTimeString('en-US', { 
               hour: '2-digit', 
               minute: '2-digit',
+              hour12: true,
               timeZone: 'America/Chicago'
             }),
             isAvailable,

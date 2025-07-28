@@ -62,7 +62,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         : `Booking Request Declined - ${bookingRequest.slot_date}`;
 
       await resend.emails.send({
-        from: "Booking System <bookings@resend.dev>",
+        from: "Booking System <onboarding@resend.dev>",
         to: [bookingRequest.user_email],
         subject,
         html: `
@@ -103,17 +103,63 @@ const serve_handler = async (req: Request): Promise<Response> => {
       <html>
         <head>
           <title>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-            .success { background: #dcfce7; border: 1px solid #22c55e; padding: 20px; border-radius: 8px; }
-            .error { background: #fef2f2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 20px;
+            }
+            .container {
+              background: rgba(255, 255, 255, 0.95);
+              backdrop-filter: blur(10px);
+              border-radius: 20px;
+              padding: 40px;
+              max-width: 500px;
+              width: 100%;
+              text-align: center;
+              box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            }
+            .icon {
+              font-size: 64px;
+              margin-bottom: 20px;
+              display: block;
+            }
+            .success-icon { color: #22c55e; }
+            .error-icon { color: #ef4444; }
+            h1 {
+              color: #1f2937;
+              margin-bottom: 16px;
+              font-size: 28px;
+              font-weight: 600;
+            }
+            p {
+              color: #6b7280;
+              line-height: 1.6;
+              margin-bottom: 12px;
+              font-size: 16px;
+            }
+            .close-note {
+              margin-top: 30px;
+              font-size: 14px;
+              opacity: 0.7;
+            }
           </style>
         </head>
         <body>
-          <div class="${action === 'approve' ? 'success' : 'error'}">
-            <h2>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</h2>
-            <p>The booking request for ${bookingRequest.user_name} on ${bookingRequest.slot_date} ${bookingRequest.slot_start_time} has been ${newStatus}.</p>
-            <p>A confirmation email has been sent to ${bookingRequest.user_email}.</p>
+          <div class="container">
+            <span class="icon ${action === 'approve' ? 'success-icon' : 'error-icon'}">
+              ${action === 'approve' ? '✅' : '❌'}
+            </span>
+            <h1>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</h1>
+            <p>The booking request for <strong>${bookingRequest.user_name}</strong> on <strong>${bookingRequest.slot_date} ${bookingRequest.slot_start_time}</strong> has been ${newStatus}.</p>
+            <p>A confirmation email has been sent to <strong>${bookingRequest.user_email}</strong>.</p>
+            <p class="close-note">You can safely close this tab.</p>
           </div>
         </body>
       </html>

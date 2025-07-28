@@ -101,7 +101,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         `;
 
         const emailResult = await resend.emails.send({
-          from: 'BookMySlot <noreply@bookmyslot.com>',
+          from: 'BookMySlot <anand@bookmyslot.me>',
           to: [bookingRequest.user_email],
           subject,
           html: `

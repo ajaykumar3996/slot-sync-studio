@@ -155,6 +155,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
+  }
 };
 
 // Gmail API email sending function

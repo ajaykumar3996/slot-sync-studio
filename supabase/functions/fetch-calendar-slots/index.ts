@@ -54,8 +54,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
     );
     
     console.log(`Found ${calendarEvents.length} events in Google Calendar`);
-    
-    // Generate available slots based on calendar events only
+    console.log('Calendar events:', JSON.stringify(calendarEvents.map(event => ({
+      summary: event.summary,
+      start: event.start,
+      end: event.end
+    })), null, 2));
     const availableSlots = generateAvailableSlots(calendarEvents, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);
@@ -300,15 +303,29 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
 }
 
 function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
-  return calendarEvents.some(event => {
+  const conflict = calendarEvents.some(event => {
     if (!event.start || !event.end) return false;
     
     const eventStart = new Date(event.start.dateTime || event.start.date);
     const eventEnd = new Date(event.end.dateTime || event.end.date);
     
     // Check if slot overlaps with any existing event
-    return slotStart < eventEnd && slotEnd > eventStart;
+    const hasOverlap = slotStart < eventEnd && slotEnd > eventStart;
+    
+    if (hasOverlap) {
+      console.log('CONFLICT DETECTED:', {
+        slotStart: slotStart.toISOString(),
+        slotEnd: slotEnd.toISOString(),
+        eventStart: eventStart.toISOString(),
+        eventEnd: eventEnd.toISOString(),
+        eventSummary: event.summary
+      });
+    }
+    
+    return hasOverlap;
   });
+  
+  return conflict;
 }
 
 serve(serve_handler);

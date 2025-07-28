@@ -16,6 +16,19 @@ interface TimeSlot {
   duration: number; // 30 or 60 minutes
 }
 
+// Add these helper functions at the top
+const CST_TIMEZONE = "America/Chicago";
+
+function toCST(date: Date): Date {
+  return new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+}
+
+function getCSTOffsetMs(date: Date): number {
+  const utcDate = new Date(date.toISOString());
+  const cstDate = new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+  return utcDate.getTime() - cstDate.getTime();
+}
+
 const serve_handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -330,54 +343,97 @@ function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string
   
   console.log(`📊 Total busy periods: ${allBusyPeriods.length}`);
   
-  // Generate slots for each day between start and end date
-  for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
-    // Skip weekends
-    if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
+  // // Generate slots for each day between start and end date
+  // for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+  //   // Skip weekends
+  //   if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
     
-    // Generate slots from 8 AM to 6 PM CST (treating as local time)
-    for (let hour = 8; hour < 18; hour++) {
-      for (let minutes = 0; minutes < 60; minutes += 30) {
-        // Create slot start time in local timezone (CST)
-        const slotStart = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          currentDate.getDate(),
-          hour,
-          minutes
-        );
+  //   // Generate slots from 8 AM to 6 PM CST (treating as local time)
+  //   for (let hour = 8; hour < 18; hour++) {
+  //     for (let minutes = 0; minutes < 60; minutes += 30) {
+  //       // Create slot start time in local timezone (CST)
+  //       const slotStart = new Date(
+  //         currentDate.getFullYear(),
+  //         currentDate.getMonth(),
+  //         currentDate.getDate(),
+  //         hour,
+  //         minutes
+  //       );
         
-        // Check both 30-minute and 60-minute slots
-        [30, 60].forEach(duration => {
-          const slotEnd = addMinutes(slotStart, duration);
+  //       // Check both 30-minute and 60-minute slots
+  //       [30, 60].forEach(duration => {
+  //         const slotEnd = addMinutes(slotStart, duration);
           
-          // Don't create 60-minute slots that would go past 6 PM
-          if (duration === 60 && slotEnd.getHours() >= 18) return;
+  //         // Don't create 60-minute slots that would go past 6 PM
+  //         if (duration === 60 && slotEnd.getHours() >= 18) return;
           
-          // Check if this slot conflicts with any busy period
-          const isAvailable = !isSlotBusy(slotStart, slotEnd, allBusyPeriods);
+  //         // Check if this slot conflicts with any busy period
+  //         const isAvailable = !isSlotBusy(slotStart, slotEnd, allBusyPeriods);
           
-          // Format display times in 12-hour format
-          const startTimeStr = format(slotStart, 'h:mm a');
-          const endTimeStr = format(slotEnd, 'h:mm a');
+  //         // Format display times in 12-hour format
+  //         const startTimeStr = format(slotStart, 'h:mm a');
+  //         const endTimeStr = format(slotEnd, 'h:mm a');
           
-          // Enhanced debug logging
-          const slotDateStr = format(slotStart, 'yyyy-MM-dd');
-          console.log(`🎯 SLOT: ${slotDateStr} ${startTimeStr} - ${endTimeStr} (${duration}min) - ${isAvailable ? 'AVAILABLE' : 'BLOCKED'}`);
+  //         // Enhanced debug logging
+  //         const slotDateStr = format(slotStart, 'yyyy-MM-dd');
+  //         console.log(`🎯 SLOT: ${slotDateStr} ${startTimeStr} - ${endTimeStr} (${duration}min) - ${isAvailable ? 'AVAILABLE' : 'BLOCKED'}`);
           
-          slots.push({
-            id: `${slotDateStr}-${hour}-${minutes}-${duration}`,
-            date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
-            startTime: startTimeStr,
-            endTime: endTimeStr,
-            isAvailable,
-            duration
-          });
-        });
-      }
-    }
+  //         slots.push({
+  //           id: `${slotDateStr}-${hour}-${minutes}-${duration}`,
+  //           date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
+  //           startTime: startTimeStr,
+  //           endTime: endTimeStr,
+  //           isAvailable,
+  //           duration
+  //         });
+  //       });
+  //     }
+  //   }
+  // }
+  // In generateAvailableSlotsFromFreebusy()
+// Replace the entire slot generation loop with:
+
+// Get timezone offset once per day
+const cstOffsetMs = getCSTOffsetMs(currentDate);
+
+for (let hour = 8; hour < 18; hour++) {
+  for (let minutes = 0; minutes < 60; minutes += 30) {
+    // Create slot in CST
+    const slotStartCST = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      currentDate.getDate(),
+      hour,
+      minutes
+    );
+    
+    // Convert to UTC equivalent
+    const slotStartUTC = new Date(slotStartCST.getTime() + cstOffsetMs);
+    
+    [30, 60].forEach(duration => {
+      const slotEndUTC = new Date(slotStartUTC.getTime() + duration * 60000);
+      
+      // Check availability against UTC busy periods
+      const isAvailable = !isSlotBusy(slotStartUTC, slotEndUTC, allBusyPeriods);
+      
+      // Format times in CST
+      const startTimeStr = format(slotStartCST, 'h:mm a');
+      const endTimeStr = format(
+        new Date(slotStartCST.getTime() + duration * 60000), 
+        'h:mm a'
+      );
+
+      slots.push({
+        id: `${slotStartCST.toISOString()}-${duration}`,
+        date: new Date(slotStartCST), // Use CST date
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+        isAvailable,
+        duration
+      });
+    });
   }
-  
+}
   return slots;
 }
 
@@ -387,19 +443,28 @@ function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: 
   
   console.log(`🔍 Checking if slot is busy: ${slotStartStr} - ${slotEndStr}`);
   
-  const isBusy = busyPeriods.some(busy => {
-    // Simple overlap detection: slot overlaps if slotStart < busyEnd AND slotEnd > busyStart
-    const hasOverlap = slotStart < busy.end && slotEnd > busy.start;
+  // const isBusy = busyPeriods.some(busy => {
+  //   // Simple overlap detection: slot overlaps if slotStart < busyEnd AND slotEnd > busyStart
+  //   const hasOverlap = slotStart < busy.end && slotEnd > busy.start;
     
-    if (hasOverlap) {
-      const busyStartStr = format(busy.start, 'yyyy-MM-dd h:mm a');
-      const busyEndStr = format(busy.end, 'yyyy-MM-dd h:mm a');
-      console.log(`❌ CONFLICT: Slot ${slotStartStr} - ${slotEndStr} overlaps with busy period ${busyStartStr} - ${busyEndStr}`);
-      return true;
-    }
+  //   if (hasOverlap) {
+  //     const busyStartStr = format(busy.start, 'yyyy-MM-dd h:mm a');
+  //     const busyEndStr = format(busy.end, 'yyyy-MM-dd h:mm a');
+  //     console.log(`❌ CONFLICT: Slot ${slotStartStr} - ${slotEndStr} overlaps with busy period ${busyStartStr} - ${busyEndStr}`);
+  //     return true;
+  //   }
     
-    return false;
-  });
+  //   return false;
+  // });
+
+  // In isSlotBusy()
+const isBusy = busyPeriods.some(busy => {
+  // Use UTC timestamps for comparison
+  return (
+    slotStart.getTime() < busy.end.getTime() && 
+    slotEnd.getTime() > busy.start.getTime()
+  );
+});
   
   if (!isBusy) {
     console.log(`✅ AVAILABLE: ${slotStartStr} - ${slotEndStr}`);
@@ -416,8 +481,9 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
   
   // Generate slots for each day between start and end date
   for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
-    // Skip weekends
-    if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
+  // Convert to CST before checking weekday
+  const cstDate = toCST(currentDate);
+  if (cstDate.getDay() === 0 || cstDate.getDay() === 6) continue;
     
     // Generate slots from 8 AM to 6 PM CST
     for (let hour = 8; hour < 18; hour++) {

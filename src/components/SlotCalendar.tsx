@@ -83,10 +83,18 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
     fetchCalendarSlots();
   }, []);
 
-  const selectedDateSlots = slots.filter(
-    slot => selectedDate && 
-    slot.date.toDateString() === selectedDate.toDateString()
-  );
+  const selectedDateSlots = slots.filter(slot => {
+  if (!selectedDate) return false;
+  
+  // Compare in same timezone
+  const slotDate = new Date(slot.date);
+  slotDate.setHours(0,0,0,0);
+  
+  const compareDate = new Date(selectedDate);
+  compareDate.setHours(0,0,0,0);
+  
+  return slotDate.getTime() === compareDate.getTime();
+});
 
   // Group slots by duration for better display
   const slotsByDuration = selectedDateSlots.reduce((acc, slot) => {

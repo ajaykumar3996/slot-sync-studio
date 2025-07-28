@@ -122,7 +122,87 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 };
 
-// ... getGoogleAccessToken and createJWT functions remain the same ...
+// ADDED BACK THE MISSING FUNCTIONS
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  try {
+    const jwt = await createJWT(clientEmail, privateKey);
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    return tokenData.access_token;
+  } catch (error) {
+    console.error('Failed to get access token:', error);
+    throw new Error(`Authentication failed: ${error.message}`);
+  }
+}
+
+async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/calendar',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  let cleanKey = privateKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\\n/g, '')
+    .replace(/\r?\n|\r/g, '')
+    .replace(/\s+/g, '');
+
+  if (!cleanKey || cleanKey.length === 0) {
+    throw new Error('Private key is empty after cleaning');
+  }
+
+  let binaryKey: string;
+  try {
+    binaryKey = atob(cleanKey);
+  } catch (e) {
+    throw new Error('Invalid base64 format in private key');
+  }
+
+  const keyBytes = new Uint8Array(binaryKey.length);
+  for (let i = 0; i < binaryKey.length; i++) {
+    keyBytes[i] = binaryKey.charCodeAt(i);
+  }
+
+  const cryptoKey = await crypto.subtle.importKey('pkcs8', keyBytes.buffer, {
+    name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput));
+  const encodedSignature = base64UrlEncode(signature);
+  return `${signingInput}.${encodedSignature}`;
+}
+
+function base64UrlEncode(data: any): string {
+  let base64: string;
+  if (typeof data === 'string') {
+    base64 = btoa(data);
+  } else if (data instanceof ArrayBuffer) {
+    base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+  } else {
+    base64 = btoa(JSON.stringify(data));
+  }
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+// END OF ADDED FUNCTIONS
 
 function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
@@ -219,8 +299,8 @@ function hasConflict(
     const eventStartStr = format(eventStart, "yyyy-MM-dd HH:mm:ss");
     const eventEndStr = format(eventEnd, "yyyy-MM-dd HH:mm:ss");
     
-    // Check for overlap
-    const hasOverlap = slotStartTime < eventEndTime && slotEndTime > eventStartTime;
+    // Check for overlap (with 1ms buffer at boundaries)
+    const hasOverlap = slotStartTime < eventEndTime - 1 && slotEndTime > eventStartTime + 1;
     
     if (hasOverlap) {
       console.log(`🚨 CONFLICT DETECTED for ${slotKey} on ${dateStr}`);

@@ -323,7 +323,6 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
 }
 
 function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: Date; end: Date }>): boolean {
-  // Convert to timestamps for precise comparison
   const slotStartTime = slotStart.getTime();
   const slotEndTime = slotEnd.getTime();
   
@@ -331,8 +330,8 @@ function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: 
     const busyStart = busy.start.getTime();
     const busyEnd = busy.end.getTime();
     
-    // Check for any overlap, including exact boundary matches
-    return (slotStartTime < busyEnd) && (slotEndTime > busyStart);
+    // Check for overlap with 1ms buffer to prevent boundary conflicts
+    return (slotStartTime < busyEnd - 1) && (slotEndTime > busyStart + 1);
   });
 }
 
@@ -348,8 +347,8 @@ function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boo
     const eventStartUTC = eventStart.getTime();
     const eventEndUTC = eventEnd.getTime();
     
-    // Check for any overlap, including exact boundary matches
-    return (slotStartUTC < eventEndUTC) && (slotEndUTC > eventStartUTC);
+    // Add 1ms buffer to prevent boundary conflicts
+    return (slotStartUTC < eventEndUTC - 1) && (slotEndUTC > eventStartUTC + 1);
   });
 }
 serve(serve_handler);

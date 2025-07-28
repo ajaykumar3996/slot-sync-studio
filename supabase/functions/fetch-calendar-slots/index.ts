@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,6 +42,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     // Get access token for Google Calendar API
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     
@@ -52,8 +58,22 @@ const serve_handler = async (req: Request): Promise<Response> => {
       endDate
     );
     
-    // Generate available slots based on calendar events
-    const availableSlots = generateAvailableSlots(calendarEvents, startDate, endDate);
+    // Fetch booking requests from database
+    const { data: bookingRequests, error: bookingError } = await supabase
+      .from('booking_requests')
+      .select('slot_date, slot_start_time, slot_end_time, status')
+      .in('status', ['pending', 'approved'])
+      .gte('slot_date', startDate.split('T')[0])
+      .lte('slot_date', endDate.split('T')[0]);
+
+    if (bookingError) {
+      console.error('Error fetching booking requests:', bookingError);
+    }
+
+    console.log(`Found ${bookingRequests?.length || 0} pending/approved booking requests`);
+    
+    // Generate available slots based on calendar events and booking requests
+    const availableSlots = generateAvailableSlots(calendarEvents, bookingRequests || [], startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);
 
@@ -227,7 +247,7 @@ async function fetchGoogleCalendarEvents(
   return data.items || [];
 }
 
-function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
+function generateAvailableSlots(calendarEvents: any[], bookingRequests: any[], startDate: string, endDate: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -266,7 +286,7 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
           // Don't create 60-minute slots that would go past 6 PM CST
           if (duration === 60 && hour >= 17) return;
           
-          const isAvailable = !hasConflict(calendarEvents, cstTime, slotEnd);
+          const isAvailable = !hasConflict(calendarEvents, bookingRequests, date.toISOString().split('T')[0], hour, minutes, duration);
           
           // Format times in CST manually to ensure correct display
           const startHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
@@ -296,16 +316,55 @@ function generateAvailableSlots(calendarEvents: any[], startDate: string, endDat
   return slots;
 }
 
-function hasConflict(events: any[], slotStart: Date, slotEnd: Date): boolean {
-  return events.some(event => {
+function hasConflict(calendarEvents: any[], bookingRequests: any[], slotDate: string, slotHour: number, slotMinutes: number, duration: number): boolean {
+  // Check calendar events
+  const calendarConflict = calendarEvents.some(event => {
     if (!event.start || !event.end) return false;
     
     const eventStart = new Date(event.start.dateTime || event.start.date);
     const eventEnd = new Date(event.end.dateTime || event.end.date);
     
+    // Create slot times for comparison
+    const slotStart = new Date(`${slotDate}T${slotHour.toString().padStart(2, '0')}:${slotMinutes.toString().padStart(2, '0')}:00-06:00`);
+    const slotEnd = new Date(slotStart);
+    slotEnd.setMinutes(slotEnd.getMinutes() + duration);
+    
     // Check if slot overlaps with any existing event
     return slotStart < eventEnd && slotEnd > eventStart;
   });
+
+  // Check booking requests
+  const bookingConflict = bookingRequests.some(booking => {
+    if (booking.slot_date !== slotDate) return false;
+    
+    // Convert booking times to comparable format
+    const bookingStartTime = convertTo24Hour(booking.slot_start_time);
+    const bookingEndTime = convertTo24Hour(booking.slot_end_time);
+    
+    const slotStartTime = `${slotHour.toString().padStart(2, '0')}:${slotMinutes.toString().padStart(2, '0')}`;
+    const slotEndHour = slotHour + Math.floor((slotMinutes + duration) / 60);
+    const slotEndMinute = (slotMinutes + duration) % 60;
+    const slotEndTime = `${slotEndHour.toString().padStart(2, '0')}:${slotEndMinute.toString().padStart(2, '0')}`;
+    
+    // Check if times overlap
+    return slotStartTime < bookingEndTime && slotEndTime > bookingStartTime;
+  });
+
+  return calendarConflict || bookingConflict;
+}
+
+function convertTo24Hour(timeStr: string): string {
+  const [time, ampm] = timeStr.split(' ');
+  const [hours, minutes] = time.split(':');
+  let hour = parseInt(hours);
+  
+  if (ampm === 'PM' && hour !== 12) {
+    hour += 12;
+  } else if (ampm === 'AM' && hour === 12) {
+    hour = 0;
+  }
+  
+  return `${hour.toString().padStart(2, '0')}:${minutes}`;
 }
 
 serve(serve_handler);

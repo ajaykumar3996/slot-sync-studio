@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { parseISO, format, isWithinInterval, addMinutes } from "https://esm.sh/date-fns@3.6.0";
+import { parseISO, format, addMinutes } from "https://esm.sh/date-fns@3.6.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,59 +52,65 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     const calendarAttempts = ['itmate.ai@gmail.com', 'primary', googleClientEmail];
-    console.log('Using Google Calendar Freebusy API for calendars:', calendarAttempts);
+    console.log('Using Google Calendar Events API for calendars:', calendarAttempts);
     
-    let availableSlots: TimeSlot[] = [];
+    let allEvents: any[] = [];
+    let successfulCalendar = null;
     
-    try {
-      const freeBusyData = await getFreeBusyData(accessToken, calendarAttempts, startDate, endDate);
-      availableSlots = generateAvailableSlotsFromFreebusy(freeBusyData, startDate, endDate);
-      
-      const totalBusyPeriods = Object.values(freeBusyData.calendars || {})
-        .reduce((total: number, calendar: any) => total + (calendar.busy?.length || 0), 0);
-      
-      if (totalBusyPeriods === 0) {
-        console.log('No busy periods from Freebusy API, falling back to Events API');
-        throw new Error('No busy periods found, using fallback');
-      }
-    } catch (error) {
-      console.error('Freebusy API failed, falling back to Events API:', error.message);
-      let allEvents: any[] = [];
-      let successfulCalendar = null;
-      
-      for (const calendarId of calendarAttempts) {
-        try {
-          const response = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
-            `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
-            { headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' } }
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            const events = data.items || [];
-            if (events.length > 0) {
-              allEvents = events;
-              successfulCalendar = calendarId;
-              break;
+    for (const calendarId of calendarAttempts) {
+      try {
+        const response = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+          `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
             }
           }
-        } catch (error) {
-          console.error(`Exception with calendar ${calendarId}:`, error.message);
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const events = data.items || [];
+          console.log(`Fetched ${events.length} events from calendar ${calendarId}`);
+          if (events.length > 0) {
+            allEvents = events;
+            successfulCalendar = calendarId;
+            break;
+          }
+        } else {
+          const errorText = await response.text();
+          console.error(`Error fetching events from ${calendarId}:`, response.status, errorText);
         }
+      } catch (error) {
+        console.error(`Exception with calendar ${calendarId}:`, error.message);
       }
-      availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     }
     
+    if (successfulCalendar) {
+      console.log(`Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
+    } else {
+      console.error('No events found in any calendar');
+    }
+    
+    const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     console.log(`Generated ${availableSlots.length} available slots`);
-    return new Response(JSON.stringify({ slots: availableSlots }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    return new Response(
+      JSON.stringify({ slots: availableSlots }), 
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
     console.error('Error in fetch-calendar-slots function:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 };
 
@@ -188,27 +194,10 @@ function base64UrlEncode(data: any): string {
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-async function getFreeBusyData(token: string, calendarIds: string[], startDate: string, endDate: string) {
-  const freeBusyRequest = { timeMin: startDate, timeMax: endDate, items: calendarIds.map(id => ({ id })) };
-  const response = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(freeBusyRequest)
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Google Calendar Freebusy API error: ${response.status} ${response.statusText}`);
-  }
-
-  return await response.json();
-}
-
-function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string, endDate: string): TimeSlot[] {
-  // ... existing setup ...
-  
-  // Create 30-minute base slots
-  const baseSlots: TimeSlot[] = [];
+function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
+  const slots: TimeSlot[] = [];
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
   
   for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
     const cstDate = toCST(currentDate);
@@ -216,7 +205,7 @@ function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string
     
     const cstOffsetMs = getCSTOffsetMs(currentDate);
     
-    // Create 30-minute slots from 8AM to 6PM
+    // Create base 30-minute slots
     for (let hour = 8; hour < 18; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
         const slotStartCST = new Date(
@@ -230,137 +219,59 @@ function generateAvailableSlotsFromFreebusy(freeBusyData: any, startDate: string
         const slotStartUTC = new Date(slotStartCST.getTime() + cstOffsetMs);
         const slotEndUTC = new Date(slotStartUTC.getTime() + 30 * 60000);
         
-        const isAvailable = !isSlotBusy(slotStartUTC, slotEndUTC, allBusyPeriods);
-        
+        const isAvailable30 = !hasConflict(calendarEvents, slotStartUTC, slotEndUTC);
         const startTimeStr = format(slotStartCST, 'h:mm a');
-        const endTimeStr = format(new Date(slotStartCST.getTime() + 30 * 60000), 'h:mm a');
+        const endTime30Str = format(new Date(slotStartCST.getTime() + 30 * 60000), 'h:mm a');
         
-        baseSlots.push({
+        // Add 30-minute slot
+        slots.push({
           id: `${slotStartCST.toISOString()}-30`,
           date: new Date(slotStartCST),
           startTime: startTimeStr,
-          endTime: endTimeStr,
-          isAvailable,
+          endTime: endTime30Str,
+          isAvailable: isAvailable30,
           duration: 30
         });
-      }
-    }
-  }
-  
-  // Create 60-minute slots where possible
-  const combinedSlots: TimeSlot[] = [...baseSlots];
-  
-  for (let i = 0; i < baseSlots.length; i++) {
-    const currentSlot = baseSlots[i];
-    
-    // Skip if current slot is booked or near the end of day
-    if (!currentSlot.isAvailable || currentSlot.date.getHours() >= 17) continue;
-    
-    // Find next slot (30 minutes after current)
-    const nextSlotIndex = baseSlots.findIndex(slot => 
-      slot.date.getTime() === currentSlot.date.getTime() &&
-      slot.startTime === format(
-        new Date(currentSlot.date.getTime() + 30 * 60000),
-        'h:mm a'
-      )
-    );
-    
-    if (nextSlotIndex !== -1 && baseSlots[nextSlotIndex].isAvailable) {
-      combinedSlots.push({
-        id: `${currentSlot.id}-60`,
-        date: new Date(currentSlot.date),
-        startTime: currentSlot.startTime,
-        endTime: baseSlots[nextSlotIndex].endTime,
-        isAvailable: true,
-        duration: 60
-      });
-    }
-  }
-  
-  return combinedSlots;
-}
-
-// function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: Date; end: Date }>): boolean {
-//   return busyPeriods.some(busy => 
-//     slotStart < busy.end && slotEnd > busy.start
-//   );
-// }
-
-function generateAvailableSlots(calendarEvents: any[], startDate: string, endDate: string): TimeSlot[] {
-  const slots: TimeSlot[] = [];
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
-  
-  for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
-    const cstDate = toCST(currentDate);
-    if (cstDate.getDay() === 0 || cstDate.getDay() === 6) continue;
-    
-    const cstOffsetMs = getCSTOffsetMs(currentDate);
-    
-    for (let hour = 8; hour < 18; hour++) {
-      for (let minutes = 0; minutes < 60; minutes += 30) {
-        const slotStartCST = new Date(
-          cstDate.getFullYear(),
-          cstDate.getMonth(),
-          cstDate.getDate(),
-          hour,
-          minutes
-        );
         
-        const slotStartUTC = new Date(slotStartCST.getTime() + cstOffsetMs);
-        
-        [30, 60].forEach(duration => {
-          if (hour + duration/60 >= 18) return;
-          const slotEndUTC = new Date(slotStartUTC.getTime() + duration * 60000);
-          const slotEndCST = new Date(slotStartCST.getTime() + duration * 60000);
+        // Create 60-minute slot if it doesn't go past 6PM
+        if (hour < 17 && minutes === 0) {
+          const slotEnd60UTC = new Date(slotStartUTC.getTime() + 60 * 60000);
+          const isAvailable60 = isAvailable30 && 
+            !hasConflict(calendarEvents, new Date(slotStartUTC.getTime() + 30 * 60000), slotEnd60UTC);
           
-          const isAvailable = !hasConflict(calendarEvents, slotStartUTC, slotEndUTC);
-          
-          const startTimeStr = format(slotStartCST, 'h:mm a');
-          const endTimeStr = format(slotEndCST, 'h:mm a');
-          
-          slots.push({
-            id: `${slotStartCST.toISOString()}-${duration}`,
-            date: new Date(slotStartCST),
-            startTime: startTimeStr,
-            endTime: endTimeStr,
-            isAvailable,
-            duration
-          });
-        });
+          if (isAvailable60) {
+            const endTime60Str = format(new Date(slotStartCST.getTime() + 60 * 60000), 'h:mm a');
+            slots.push({
+              id: `${slotStartCST.toISOString()}-60`,
+              date: new Date(slotStartCST),
+              startTime: startTimeStr,
+              endTime: endTime60Str,
+              isAvailable: true,
+              duration: 60
+            });
+          }
+        }
       }
     }
   }
   return slots;
 }
 
-function isSlotBusy(slotStart: Date, slotEnd: Date, busyPeriods: Array<{ start: Date; end: Date }>): boolean {
+function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
   const slotStartTime = slotStart.getTime();
   const slotEndTime = slotEnd.getTime();
-  
-  return busyPeriods.some(busy => {
-    const busyStart = busy.start.getTime();
-    const busyEnd = busy.end.getTime();
-    
-    // Check for overlap with 1ms buffer to prevent boundary conflicts
-    return (slotStartTime < busyEnd - 1) && (slotEndTime > busyStart + 1);
-  });
-}
-
-function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
-  const slotStartUTC = slotStart.getTime();
-  const slotEndUTC = slotEnd.getTime();
   
   return calendarEvents.some(event => {
     if (!event.start || !event.end) return false;
     
     const eventStart = parseISO(event.start.dateTime || event.start.date);
     const eventEnd = parseISO(event.end.dateTime || event.end.date);
-    const eventStartUTC = eventStart.getTime();
-    const eventEndUTC = eventEnd.getTime();
+    const eventStartTime = eventStart.getTime();
+    const eventEndTime = eventEnd.getTime();
     
-    // Add 1ms buffer to prevent boundary conflicts
-    return (slotStartUTC < eventEndUTC - 1) && (slotEndUTC > eventStartUTC + 1);
+    // Check for overlap with 1ms buffer to avoid boundary issues
+    return (slotStartTime < eventEndTime - 1) && (slotEndTime > eventStartTime + 1);
   });
 }
+
 serve(serve_handler);

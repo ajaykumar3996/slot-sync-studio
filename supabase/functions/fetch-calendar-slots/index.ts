@@ -45,63 +45,50 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // Get access token for Google Calendar API
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     
-    // Use the same calendar logic as the approval function - try calendars in same order
-    const calendarAttempts = [
-      'itmate.ai@gmail.com',
-      'primary', 
-      googleClientEmail
-    ];
-    
-    console.log('🎯 Fetching events from calendars:', calendarAttempts);
+    // Since the approval function creates events on 'primary' calendar successfully,
+    // let's focus only on that calendar to ensure consistency
+    console.log('🎯 Fetching events from primary calendar only');
     
     let allEvents: any[] = [];
-    let successfulCalendar = null;
     
-    // Try each calendar until we find one that works (same logic as approval function)
-    for (const calendarId of calendarAttempts) {
-      try {
-        console.log(`📍 Trying calendar: ${calendarId}`);
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        allEvents = data.items || [];
         
-        const response = await fetch(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
-          `timeMin=${startDate}&timeMax=${endDate}&singleEvents=true&orderBy=startTime`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            }
+        // Return a simple response for now to test if this works
+        return new Response(
+          JSON.stringify({ 
+            message: `Found ${allEvents.length} events in primary calendar`,
+            events: allEvents.map(e => ({ 
+              summary: e.summary, 
+              start: e.start, 
+              end: e.end 
+            })),
+            slots: [] // Temporarily return empty slots to see if events are found
+          }), 
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
         );
-
-        console.log(`📡 API Response for ${calendarId}: ${response.status} ${response.statusText}`);
-
-        if (response.ok) {
-          const data = await response.json();
-          const events = data.items || [];
-          console.log(`✅ SUCCESS! Found ${events.length} events in calendar: ${calendarId}`);
-          
-          if (events.length > 0) {
-            console.log('📅 Events found:', JSON.stringify(events.map(event => ({
-              summary: event.summary,
-              start: event.start,
-              end: event.end
-            })), null, 2));
-            
-            allEvents = events;
-            successfulCalendar = calendarId;
-            break; // Use the first calendar that has events
-          }
-        } else {
-          const errorData = await response.text();
-          console.error(`❌ Failed on ${calendarId} (${response.status}): ${errorData}`);
-        }
-      } catch (error) {
-        console.error(`💥 Exception with calendar ${calendarId}:`, error.message);
+      } else {
+        const errorText = await response.text();
+        throw new Error(`Calendar API error: ${response.status} - ${errorText}`);
       }
+    } catch (error) {
+      throw new Error(`Failed to fetch calendar events: ${error.message}`);
     }
-    
-    console.log(`📊 Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
-    console.log(`📋 FINAL EVENTS BEING PASSED TO SLOT GENERATOR:`, JSON.stringify(allEvents, null, 2));
     const availableSlots = generateAvailableSlots(allEvents, startDate, endDate);
     
     console.log(`Generated ${availableSlots.length} available slots`);

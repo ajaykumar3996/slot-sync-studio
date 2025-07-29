@@ -1,47 +1,28 @@
-async function fetchFreeBusyIntervals(startDate: string, endDate: string, accessToken: string) {
-  const freeBusyResponse = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      timeMin: startDate,
-      timeMax: endDate,
-      timeZone: CST_TIMEZONE,
-      items: [{ id: 'itmate.ai@gmail.com' }, { id: 'primary' }]
-    })
-  });
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { format } from "https://deno.land/x/date_fns@v2.22.1/index.js";
 
-  if (!freeBusyResponse.ok) {
-    const errorText = await freeBusyResponse.text();
-    throw new Error(`FreeBusy API error: ${freeBusyResponse.status} ${errorText}`);
-  }
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
-  const freeBusyData = await freeBusyResponse.json();
-  return freeBusyData.calendars;
+const CST_TIMEZONE = 'America/Chicago';
+
+interface TimeSlot {
+  id: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  isAvailable: boolean;
+  duration: number;
 }
 
-async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
-  try {
-    const jwt = await createJWT(clientEmail, privateKey);
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`);
-    }
-
-    const tokenData = await tokenResponse.json();
-    return tokenData.access_token;
-  } catch (error) {
-    console.error('Failed to get access token:', error);
-    throw new Error(`Authentication failed: ${error.message}`);
-  }
+function base64UrlEncode(data: any): string {
+  return btoa(data)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
 async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
@@ -76,7 +57,77 @@ async function createJWT(clientEmail: string, privateKey: string): Promise<strin
   } catch (e) {
     throw new Error('Invalid base64 format in private key');
   }
-  
+
+  const keyData = new Uint8Array(binaryKey.length);
+  for (let i = 0; i < binaryKey.length; i++) {
+    keyData[i] = binaryKey.charCodeAt(i);
+  }
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyData,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signatureBuffer = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+
+  const signature = base64UrlEncode(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+  return `${signingInput}.${signature}`;
+}
+
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  try {
+    const jwt = await createJWT(clientEmail, privateKey);
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    return tokenData.access_token;
+  } catch (error) {
+    console.error('Failed to get access token:', error);
+    throw new Error(`Authentication failed: ${error.message}`);
+  }
+}
+
+async function fetchFreeBusyIntervals(startDate: string, endDate: string, accessToken: string) {
+  const freeBusyResponse = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      timeMin: startDate,
+      timeMax: endDate,
+      timeZone: CST_TIMEZONE,
+      items: [{ id: 'itmate.ai@gmail.com' }, { id: 'primary' }]
+    })
+  });
+
+  if (!freeBusyResponse.ok) {
+    const errorText = await freeBusyResponse.text();
+    throw new Error(`FreeBusy API error: ${freeBusyResponse.status} ${errorText}`);
+  }
+
+  const freeBusyData = await freeBusyResponse.json();
+  console.log('🔍 FreeBusy API Response:', JSON.stringify(freeBusyData, null, 2));
+  return freeBusyData.calendars;
+}
+
 function generateAvailableSlotsFromFreeBusy(freeBusyData: any, startDate: string, endDate: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const start = new Date(startDate);
@@ -95,8 +146,11 @@ function generateAvailableSlotsFromFreeBusy(freeBusyData: any, startDate: string
     // Get busy intervals for this date
     const busyIntervals: { start: string, end: string }[] = [];
     for (const calendarId in freeBusyData) {
+      console.log(`📋 Calendar ${calendarId} busy periods:`, freeBusyData[calendarId].busy);
       busyIntervals.push(...(freeBusyData[calendarId].busy || []));
     }
+
+    console.log(`⏰ Total busy intervals for ${dateStr}:`, busyIntervals);
 
     // Generate slots from business hours
     for (let hour = BUSINESS_START; hour < BUSINESS_END; hour++) {
@@ -108,7 +162,11 @@ function generateAvailableSlotsFromFreeBusy(freeBusyData: any, startDate: string
         const isAvailable = !busyIntervals.some(interval => {
           const busyStart = new Date(interval.start).getTime();
           const busyEnd = new Date(interval.end).getTime();
-          return slotStart.getTime() < busyEnd && slotEnd.getTime() > busyStart;
+          const overlap = slotStart.getTime() < busyEnd && slotEnd.getTime() > busyStart;
+          if (overlap) {
+            console.log(`❌ Slot ${hour}:${minutes.toString().padStart(2, '0')} conflicts with ${interval.start} - ${interval.end}`);
+          }
+          return overlap;
         });
 
         // Format times in 12-hour format
@@ -136,7 +194,47 @@ function generateAvailableSlotsFromFreeBusy(freeBusyData: any, startDate: string
   return slots;
 }
 
-// In serve_handler:
-const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
-const freeBusyData = await fetchFreeBusyIntervals(startDate, endDate, accessToken);
-const availableSlots = generateAvailableSlotsFromFreeBusy(freeBusyData, startDate, endDate);
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { startDate, endDate } = await req.json();
+    
+    const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
+    const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
+
+    if (!googleClientEmail || !googlePrivateKey) {
+      throw new Error('Google credentials not configured');
+    }
+
+    console.log('🔑 Getting Google access token...');
+    const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
+    console.log('✅ Access token obtained');
+
+    console.log('📅 Fetching FreeBusy data...');
+    const freeBusyData = await fetchFreeBusyIntervals(startDate, endDate, accessToken);
+
+    console.log('⚡ Generating available slots...');
+    const availableSlots = generateAvailableSlotsFromFreeBusy(freeBusyData, startDate, endDate);
+
+    console.log(`✨ Generated ${availableSlots.length} total slots`);
+    console.log(`✅ Available slots: ${availableSlots.filter(s => s.isAvailable).length}`);
+
+    return new Response(
+      JSON.stringify({ slots: availableSlots }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error) {
+    console.error('❌ Error in fetch-calendar-slots:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+});

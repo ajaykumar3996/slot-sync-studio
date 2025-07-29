@@ -90,7 +90,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     
     console.log(`Using calendar: ${successfulCalendar}, Total events: ${allEvents.length}`);
     
-    // Convert events to a simpler format for the frontend
+    // Convert events to a simpler format for conflict checking
     const calendarEvents = allEvents.map((event: any, index: number) => ({
       id: event.id || `event-${index}`,
       title: event.summary || 'Untitled Event',
@@ -100,10 +100,15 @@ const serve_handler = async (req: Request): Promise<Response> => {
       location: event.location || ''
     }));
 
-    console.log(`Returning ${calendarEvents.length} calendar events`);
+    console.log(`Found ${calendarEvents.length} calendar events, generating slots...`);
+
+    // Generate time slots and check against calendar events
+    const slots = generateTimeSlots(startDate, endDate, calendarEvents);
+    
+    console.log(`Generated ${slots.length} time slots`);
 
     return new Response(
-      JSON.stringify({ events: calendarEvents }), 
+      JSON.stringify({ slots }), 
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
@@ -199,62 +204,70 @@ function base64UrlEncode(data: any): string {
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-// Remove the complex slot generation logic - we'll display events directly
+function generateTimeSlots(startDate: string, endDate: string, calendarEvents: any[]): TimeSlot[] {
+  const slots: TimeSlot[] = [];
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
+  
+  console.log(`Generating slots from ${startDate} to ${endDate}`);
+  
+  // Generate slots for each day
+  for (let currentDate = new Date(start); currentDate < end; currentDate.setDate(currentDate.getDate() + 1)) {
+    // Skip weekends
+    if (currentDate.getDay() === 0 || currentDate.getDay() === 6) continue;
+    
+    // Generate slots for business hours (9 AM to 5 PM CST)
+    for (let hour = 9; hour < 17; hour++) {
+      for (let duration of [30, 60]) { // 30 and 60 minute slots
+        const slotStart = new Date(currentDate);
+        slotStart.setHours(hour, 0, 0, 0);
+        
+        const slotEnd = addMinutes(slotStart, duration);
+        
+        // Don't create slots that extend past business hours
+        if (slotEnd.getHours() >= 17) continue;
+        
+        const slotId = `${format(slotStart, 'yyyy-MM-dd')}-${format(slotStart, 'HH:mm')}-${duration}min`;
+        
+        // Check if this slot conflicts with any calendar events
+        const isAvailable = !hasConflict(calendarEvents, slotStart, slotEnd);
+        
+        slots.push({
+          id: slotId,
+          date: new Date(slotStart),
+          startTime: format(slotStart, 'h:mm a'),
+          endTime: format(slotEnd, 'h:mm a'),
+          isAvailable,
+          duration
+        });
+      }
+    }
+  }
+  
+  return slots;
+}
 
-// function hasConflict(
-//   calendarEvents: any[], 
-//   slotStart: Date, 
-//   slotEnd: Date,
-//   dateStr: string,
-//   slotKey: string
-// ): boolean {
-//   const slotStartTime = slotStart.getTime();
-//   const slotEndTime = slotEnd.getTime();
+function hasConflict(calendarEvents: any[], slotStart: Date, slotEnd: Date): boolean {
+  const slotStartTime = slotStart.getTime();
+  const slotEndTime = slotEnd.getTime();
   
-//   // Format times for debugging
-//   const slotStartStr = format(slotStart, "yyyy-MM-dd HH:mm:ss");
-//   const slotEndStr = format(slotEnd, "yyyy-MM-dd HH:mm:ss");
-  
-//   let conflictFound = false;
-  
-//   const result = calendarEvents.some(event => {
-//     if (!event.start || !event.end) return false;
+  return calendarEvents.some(event => {
+    if (!event.start || !event.end) return false;
     
-//     const eventStart = parseISO(event.start.dateTime || event.start.date);
-//     const eventEnd = parseISO(event.end.dateTime || event.end.date);
-//     const eventStartTime = eventStart.getTime();
-//     const eventEndTime = eventEnd.getTime();
+    const eventStart = parseISO(event.start);
+    const eventEnd = parseISO(event.end);
+    const eventStartTime = eventStart.getTime();
+    const eventEndTime = eventEnd.getTime();
     
-//     // Format event times for debugging
-//     const eventStartStr = format(eventStart, "yyyy-MM-dd HH:mm:ss");
-//     const eventEndStr = format(eventEnd, "yyyy-MM-dd HH:mm:ss");
+    // Check for overlap: slot starts before event ends AND slot ends after event starts
+    const hasOverlap = slotStartTime < eventEndTime && slotEndTime > eventStartTime;
     
-//     // Log detailed information about the event
-//     console.log(`🔍 Checking event: ${event.summary || 'Untitled'}`);
-//     console.log(`   Event start: ${eventStartStr} (${eventStartTime})`);
-//     console.log(`   Event end:   ${eventEndStr} (${eventEndTime})`);
-//     console.log(`   Slot start:  ${slotStartStr} (${slotStartTime})`);
-//     console.log(`   Slot end:    ${slotEndStr} (${slotEndTime})`);
+    if (hasOverlap) {
+      console.log(`Conflict detected: ${event.title} (${event.start} - ${event.end}) overlaps with slot (${format(slotStart, 'yyyy-MM-dd HH:mm')} - ${format(slotEnd, 'yyyy-MM-dd HH:mm')})`);
+    }
     
-//     // Check for overlap
-//     const hasOverlap = slotStartTime < eventEndTime && slotEndTime > eventStartTime;
-    
-//     if (hasOverlap) {
-//       console.log(`🚨 CONFLICT DETECTED for ${slotKey} on ${dateStr}`);
-//       console.log(`   Slot: ${slotStartStr} to ${slotEndStr}`);
-//       console.log(`   Event: ${event.summary || 'Untitled'} (${eventStartStr} to ${eventEndStr})`);
-//       conflictFound = true;
-//       return true;
-//     }
-    
-//     return false;
-//   });
-  
-//   if (!conflictFound) {
-//     console.log(`✅ No conflict for ${slotKey} on ${dateStr} (${slotStartStr} to ${slotEndStr})`);
-//   }
-  
-//   return result;
-// }
+    return hasOverlap;
+  });
+}
 
 serve(serve_handler);

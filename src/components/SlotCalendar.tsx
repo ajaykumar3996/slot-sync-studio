@@ -7,27 +7,27 @@ import { Clock, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-interface TimeSlot {
+interface CalendarEvent {
   id: string;
-  date: Date;
-  startTime: string;
-  endTime: string;
-  isAvailable: boolean;
-  duration: number;
+  title: string;
+  start: string;
+  end: string;
+  description: string;
+  location: string;
 }
 
 interface SlotCalendarProps {
-  onSlotSelect: (slot: TimeSlot) => void;
+  onEventSelect?: (event: CalendarEvent) => void;
 }
 
-export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
+export function SlotCalendar({ onEventSelect }: SlotCalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date>();
-  const [slots, setSlots] = useState<TimeSlot[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const { toast } = useToast();
   
-  const fetchCalendarSlots = async () => {
+  const fetchCalendarEvents = async () => {
     setLoading(true);
     try {
       const today = new Date();
@@ -42,18 +42,14 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
       });
 
       if (error) {
-        toast({ title: "Error", description: "Failed to fetch time slots", variant: "destructive" });
+        toast({ title: "Error", description: "Failed to fetch calendar events", variant: "destructive" });
         return;
       }
 
-      const calendarSlots: TimeSlot[] = data.slots.map((slot: any) => ({
-        ...slot,
-        date: new Date(slot.date)
-      }));
-
-      setSlots(calendarSlots);
+      const calendarEvents: CalendarEvent[] = data.events || [];
+      setEvents(calendarEvents);
       setLastUpdated(new Date());
-      toast({ title: "Calendar Updated", description: "Latest availability loaded" });
+      toast({ title: "Calendar Updated", description: `Loaded ${calendarEvents.length} events` });
 
     } catch (error) {
       toast({ title: "Error", description: "Failed to connect to calendar service", variant: "destructive" });
@@ -62,28 +58,21 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
     }
   };
 
-  useEffect(() => { fetchCalendarSlots(); }, []);
+  useEffect(() => { fetchCalendarEvents(); }, []);
 
-  const selectedDateSlots = slots.filter(slot => {
+  const selectedDateEvents = events.filter(event => {
     if (!selectedDate) return false;
-    const slotDate = new Date(slot.date);
-    slotDate.setHours(0,0,0,0);
+    const eventDate = new Date(event.start);
+    eventDate.setHours(0,0,0,0);
     
     const compareDate = new Date(selectedDate);
     compareDate.setHours(0,0,0,0);
     
-    return slotDate.getTime() === compareDate.getTime();
+    return eventDate.getTime() === compareDate.getTime();
   });
 
-  const slotsByDuration = selectedDateSlots.reduce((acc, slot) => {
-    if (!acc[slot.duration]) acc[slot.duration] = [];
-    acc[slot.duration].push(slot);
-    return acc;
-  }, {} as Record<number, TimeSlot[]>);
-  
-  const availableDates = slots
-    .filter(slot => slot.isAvailable)
-    .map(slot => slot.date);
+  // Get unique dates that have events
+  const eventDates = events.map(event => new Date(event.start));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -94,7 +83,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
               <Clock className="h-5 w-5" />
               Select a Date
             </div>
-            <Button variant="outline" size="sm" onClick={fetchCalendarSlots} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={fetchCalendarEvents} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </CardTitle>
@@ -109,12 +98,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
             mode="single"
             selected={selectedDate}
             onSelect={setSelectedDate}
-            disabled={(date) => 
-              date < new Date() || 
-              !availableDates.some(availableDate => 
-                availableDate.toDateString() === date.toDateString()
-              )
-            }
+            disabled={(date) => date < new Date()}
             className="rounded-md border"
           />
         </CardContent>
@@ -122,57 +106,61 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
       
       <Card>
         <CardHeader>
-          <CardTitle>Available Time Slots (CST)</CardTitle>
+          <CardTitle>Calendar Events</CardTitle>
           {loading && (
             <p className="text-sm text-muted-foreground">
-              Loading latest availability...
+              Loading calendar events...
             </p>
           )}
         </CardHeader>
         <CardContent>
           {selectedDate ? (
             <div className="space-y-4">
-              {Object.keys(slotsByDuration).length > 0 ? (
-                Object.entries(slotsByDuration).map(([duration, durationSlots]) => (
-                  <div key={duration} className="space-y-2">
-                    <h4 className="font-medium text-sm text-muted-foreground">
-                      {duration}-minute slots
-                    </h4>
-                    {durationSlots.map((slot) => (
-                      <div key={slot.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">
-                            {slot.startTime} - {slot.endTime}
-                          </span>
-                          <Badge variant={slot.isAvailable ? "default" : "secondary"}>
-                            {slot.isAvailable ? "Available" : "Booked"}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {slot.duration}min
-                          </Badge>
-                        </div>
-                        {slot.isAvailable && (
-                          <Button 
-                            size="sm" 
-                            onClick={() => onSlotSelect(slot)}
-                            disabled={loading}
-                          >
-                            Book Slot
-                          </Button>
+              {selectedDateEvents.length > 0 ? (
+                selectedDateEvents.map((event) => {
+                  const startTime = new Date(event.start).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                    timeZone: 'America/Chicago'
+                  });
+                  const endTime = new Date(event.end).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                    timeZone: 'America/Chicago'
+                  });
+                  
+                  return (
+                    <div key={event.id} className="p-4 border rounded-lg bg-muted/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-medium">{event.title}</h3>
+                        <Badge variant="secondary">Busy</Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        <p className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          {startTime} - {endTime} CST
+                        </p>
+                        {event.location && (
+                          <p className="mt-1">📍 {event.location}</p>
+                        )}
+                        {event.description && (
+                          <p className="mt-2 text-sm">{event.description}</p>
                         )}
                       </div>
-                    ))}
-                  </div>
-                ))
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-muted-foreground text-center py-4">
-                  {loading ? "Loading slots..." : "No slots available for this date"}
+                  {loading ? "Loading events..." : "No events for this date"}
                 </p>
               )}
             </div>
           ) : (
             <p className="text-muted-foreground text-center py-4">
-              Please select a date to view available slots
+              Please select a date to view events
             </p>
           )}
         </CardContent>

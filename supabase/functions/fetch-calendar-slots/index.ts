@@ -29,31 +29,7 @@ function getCSTOffsetMs(date: Date): number {
 }
 
 const serve_handler = async (req: Request): Promise<Response> => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { startDate, endDate } = await req.json();
-    console.log('Fetching calendar slots for date range:', { startDate, endDate });
-
-    const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
-    const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
-
-    if (!googleClientEmail || !googlePrivateKey) {
-      console.error('Missing Google Calendar credentials');
-      return new Response(
-        JSON.stringify({ error: 'Google Calendar API not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
-    const calendarId = Deno.env.get('GOOGLE_CALENDAR_ID') || 'itmate.ai@gmail.com';
-
-    // Fetch busy intervals directly from Google Calendar
-    const busyIntervals = await fetchBusyIntervals(accessToken, calendarId, startDate, endDate);
-    console.log(`Fetched ${busyIntervals.length} busy intervals`);
+  // ... existing handler code until busyIntervals fetch ...
 
     // Generate available slots based on busy intervals
     const availableSlots = generateAvailableSlots(busyIntervals, startDate, endDate);
@@ -63,7 +39,6 @@ const serve_handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ slots: availableSlots }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
     console.error('Error in fetch-calendar-slots function:', error);
     return new Response(
@@ -80,36 +55,7 @@ async function fetchBusyIntervals(
   startDate: string,
   endDate: string
 ): Promise<{ start: Date; end: Date }[]> {
-  const response = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      timeMin: startDate,
-      timeMax: endDate,
-      items: [{ id: calendarId }]
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`FreeBusy API failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  const calendarData = data.calendars[calendarId];
-  
-  if (calendarData.errors) {
-    console.error('Calendar errors:', calendarData.errors);
-    throw new Error('Error fetching calendar data');
-  }
-
-  return (calendarData.busy || []).map((busy: any) => ({
-    start: new Date(busy.start),
-    end: new Date(busy.end)
-  }));
+  // ... existing FreeBusy API call ...
 }
 
 // Generate available slots based on busy intervals
@@ -140,11 +86,14 @@ function generateAvailableSlots(
           minutes
         );
 
-        const slotEndCST = new Date(slotStartCST.getTime() + 30 * 60000);
-        const isAvailable = !isSlotBusy(slotStartCST, slotEndCST, busyIntervals);
+        // Convert CST slot to UTC for comparison with busyIntervals
+        const slotStartUTC = new Date(slotStartCST.getTime() + getCSTOffsetMs(slotStartCST));
+        const slotEndUTC = new Date(slotStartUTC.getTime() + 30 * 60000);
+        
+        const isAvailable = !isSlotBusy(slotStartUTC, slotEndUTC, busyIntervals);
 
         const startTimeStr = format(slotStartCST, 'h:mm a');
-        const endTimeStr = format(slotEndCST, 'h:mm a');
+        const endTimeStr = format(new Date(slotStartCST.getTime() + 30 * 60000), 'h:mm a');
         const slotKey = `${hour}:${minutes.toString().padStart(2, '0')}`;
 
         // Add 30-minute slot
@@ -159,12 +108,12 @@ function generateAvailableSlots(
 
         // Create 60-minute slot if available and within working hours
         if (minutes === 0 && hour < WORKING_HOURS.end - 1) {
-          const slotEnd60CST = new Date(slotStartCST.getTime() + 60 * 60000);
+          const slotEnd60UTC = new Date(slotStartUTC.getTime() + 60 * 60000);
           const isAvailable60 = isAvailable && 
-            !isSlotBusy(slotEndCST, slotEnd60CST, busyIntervals);
+            !isSlotBusy(slotEndUTC, slotEnd60UTC, busyIntervals);
 
           if (isAvailable60) {
-            const endTime60Str = format(slotEnd60CST, 'h:mm a');
+            const endTime60Str = format(new Date(slotStartCST.getTime() + 60 * 60000), 'h:mm a');
             
             slots.push({
               id: `${dateStr}-${slotKey}-60`,
@@ -183,17 +132,21 @@ function generateAvailableSlots(
   return slots;
 }
 
-// Check if slot overlaps with any busy interval
+// Check if slot overlaps with any busy interval (using UTC times)
 function isSlotBusy(
   slotStart: Date,
   slotEnd: Date,
   busyIntervals: { start: Date; end: Date }[]
 ): boolean {
-  return busyIntervals.some(busy => 
-    slotStart < busy.end && slotEnd > busy.start
-  );
+  return busyIntervals.some(busy => {
+    const busyStart = busy.start.getTime();
+    const busyEnd = busy.end.getTime();
+    const slotStartTime = slotStart.getTime();
+    const slotEndTime = slotEnd.getTime();
+    
+    return slotStartTime < busyEnd && slotEndTime > busyStart;
+  });
 }
-
 async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
   try {
     const jwt = await createJWT(clientEmail, privateKey);

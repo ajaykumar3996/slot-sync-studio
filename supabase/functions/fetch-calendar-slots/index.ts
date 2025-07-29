@@ -22,6 +22,61 @@ async function fetchFreeBusyIntervals(startDate: string, endDate: string, access
   return freeBusyData.calendars;
 }
 
+async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
+  try {
+    const jwt = await createJWT(clientEmail, privateKey);
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    return tokenData.access_token;
+  } catch (error) {
+    console.error('Failed to get access token:', error);
+    throw new Error(`Authentication failed: ${error.message}`);
+  }
+}
+
+async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/calendar',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  let cleanKey = privateKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\\n/g, '')
+    .replace(/\r?\n|\r/g, '')
+    .replace(/\s+/g, '');
+
+  if (!cleanKey || cleanKey.length === 0) {
+    throw new Error('Private key is empty after cleaning');
+  }
+
+  let binaryKey: string;
+  try {
+    binaryKey = atob(cleanKey);
+  } catch (e) {
+    throw new Error('Invalid base64 format in private key');
+  }
+  
 function generateAvailableSlotsFromFreeBusy(freeBusyData: any, startDate: string, endDate: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const start = new Date(startDate);
@@ -80,60 +135,7 @@ function generateAvailableSlotsFromFreeBusy(freeBusyData: any, startDate: string
   }
   return slots;
 }
-async function getGoogleAccessToken(clientEmail: string, privateKey: string): Promise<string> {
-  try {
-    const jwt = await createJWT(clientEmail, privateKey);
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
-    });
 
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`);
-    }
-
-    const tokenData = await tokenResponse.json();
-    return tokenData.access_token;
-  } catch (error) {
-    console.error('Failed to get access token:', error);
-    throw new Error(`Authentication failed: ${error.message}`);
-  }
-}
-
-async function createJWT(clientEmail: string, privateKey: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const payload = {
-    iss: clientEmail,
-    scope: 'https://www.googleapis.com/auth/calendar',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  };
-
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-
-  let cleanKey = privateKey
-    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-    .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\\n/g, '')
-    .replace(/\r?\n|\r/g, '')
-    .replace(/\s+/g, '');
-
-  if (!cleanKey || cleanKey.length === 0) {
-    throw new Error('Private key is empty after cleaning');
-  }
-
-  let binaryKey: string;
-  try {
-    binaryKey = atob(cleanKey);
-  } catch (e) {
-    throw new Error('Invalid base64 format in private key');
-  }
 // In serve_handler:
 const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
 const freeBusyData = await fetchFreeBusyIntervals(startDate, endDate, accessToken);

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { parseISO, format, addMinutes, isWithinInterval, startOfDay } from "https://esm.sh/date-fns@3.6.0";
+import { format, addMinutes, isWithinInterval } from "https://esm.sh/date-fns@3.6.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,18 +18,24 @@ interface TimeSlot {
 const CST_TIMEZONE = "America/Chicago";
 const WORKING_HOURS = { start: 8, end: 18 }; // 8 AM - 6 PM CST
 
-function toCST(date: Date): Date {
-  return new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
-}
-
-function getCSTOffsetMs(date: Date): number {
-  const utcDate = new Date(date.toISOString());
-  const cstDate = new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
-  return utcDate.getTime() - cstDate.getTime();
-}
-
-function logTime(label: string, date: Date) {
-  console.log(`${label}: ${date.toISOString()} (UTC) / ${date.toLocaleString('en-US', { timeZone: CST_TIMEZONE })} (CST)`);
+// New proper timezone conversion functions
+function toUTC(cstDate: Date): Date {
+  const isoString = cstDate.toLocaleString("en-US", {
+    timeZone: CST_TIMEZONE,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+  
+  const [month, day, year] = isoString.split(",")[0].split("/");
+  const [hour, minute, second] = isoString.split(",")[1].trim().split(":");
+  
+  // Create ISO string in UTC
+  return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
 }
 
 const serve_handler = async (req: Request): Promise<Response> => {
@@ -66,17 +72,9 @@ const serve_handler = async (req: Request): Promise<Response> => {
     const busyIntervals = await fetchBusyIntervals(accessToken, calendarId, startDate, endDate);
     console.log(`📊 Fetched ${busyIntervals.length} busy intervals`);
     
-    // Log all busy intervals
-    busyIntervals.forEach((busy, index) => {
-      console.log(`📅 Busy Interval #${index + 1}:`);
-      logTime('  Start', busy.start);
-      logTime('  End  ', busy.end);
-      console.log(`  Duration: ${(busy.end.getTime() - busy.start.getTime()) / 60000} minutes`);
-    });
-
     // Generate available slots
     console.log('🔄 Generating available slots...');
-    const availableSlots = generateAvailableSlotsWithLogging(busyIntervals, startDate, endDate);
+    const availableSlots = generateAvailableSlots(busyIntervals, startDate, endDate);
     console.log(`✅ Generated ${availableSlots.length} time slots`);
 
     return new Response(
@@ -100,12 +98,6 @@ async function fetchBusyIntervals(
   startDate: string,
   endDate: string
 ): Promise<{ start: Date; end: Date }[]> {
-  console.log('🌐 Calling FreeBusy API with:', {
-    timeMin: startDate,
-    timeMax: endDate,
-    calendarId
-  });
-
   const response = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
     method: 'POST',
     headers: {
@@ -140,88 +132,60 @@ async function fetchBusyIntervals(
   }));
 }
 
-// Generate available slots with detailed logging
-function generateAvailableSlotsWithLogging(
+// Generate available slots with proper timezone handling
+function generateAvailableSlots(
   busyIntervals: { start: Date; end: Date }[],
   startDate: string,
   endDate: string
 ): TimeSlot[] {
   const slots: TimeSlot[] = [];
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
+  const start = new Date(startDate);
+  const end = new Date(endDate);
   
   console.log(`📅 Processing dates from ${start.toISOString()} to ${end.toISOString()}`);
 
-  for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
-    const cstDate = toCST(currentDate);
+  // Create a date without time components for comparison
+  const current = new Date(start);
+  current.setHours(0, 0, 0, 0);
+  
+  while (current <= end) {
+    const dayOfWeek = current.getDay();
     
     // Skip weekends
-    if (cstDate.getDay() === 0 || cstDate.getDay() === 6) {
-      console.log(`🚫 Skipping weekend: ${format(cstDate, 'yyyy-MM-dd')} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][cstDate.getDay()]})`);
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      console.log(`🚫 Skipping weekend: ${format(current, 'yyyy-MM-dd')} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]})`);
+      current.setDate(current.getDate() + 1);
       continue;
     }
 
-    const dateStr = format(cstDate, 'yyyy-MM-dd');
-    console.log(`\n📆 Generating slots for ${dateStr} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][cstDate.getDay()]})`);
+    const dateStr = format(current, 'yyyy-MM-dd');
+    console.log(`\n📆 Generating slots for ${dateStr} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOfWeek]})`);
     
-    // Get CST offset for this date (for UTC conversion)
-    const cstOffsetMs = getCSTOffsetMs(currentDate);
-    console.log(`⏱️ CST offset: ${cstOffsetMs / 60000} minutes`);
-
     // Create base 30-minute slots
     for (let hour = WORKING_HOURS.start; hour < WORKING_HOURS.end; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        const slotStartCST = new Date(
-          cstDate.getFullYear(),
-          cstDate.getMonth(),
-          cstDate.getDate(),
-          hour,
-          minutes
-        );
+        // Create CST time
+        const slotStartCST = new Date(current);
+        slotStartCST.setHours(hour, minutes, 0, 0);
         
-        const slotEndCST = new Date(slotStartCST.getTime() + 30 * 60000);
-        const slotKey = `${hour}:${minutes.toString().padStart(2, '0')}`;
-        
-        // Convert to UTC for comparison
-        const slotStartUTC = new Date(slotStartCST.getTime() + cstOffsetMs);
+        // Properly convert to UTC
+        const slotStartUTC = toUTC(slotStartCST);
         const slotEndUTC = new Date(slotStartUTC.getTime() + 30 * 60000);
         
-        console.log(`\n🕒 Slot: ${slotKey} (${format(slotStartCST, 'h:mm a')} - ${format(slotEndCST, 'h:mm a')} CST)`);
-        logTime('  CST Start', slotStartCST);
-        logTime('  CST End  ', slotEndCST);
-        logTime('  UTC Start', slotStartUTC);
-        logTime('  UTC End  ', slotEndUTC);
+        const slotKey = `${hour}:${minutes.toString().padStart(2, '0')}`;
+        const startTimeStr = format(slotStartCST, 'h:mm a');
+        const endTimeStr = format(new Date(slotStartCST.getTime() + 30 * 60000), 'h:mm a');
         
         // Check for conflicts
         let isAvailable = true;
-        let conflictFound = false;
-        
-        for (const [index, busy] of busyIntervals.entries()) {
-          const busyStart = busy.start;
-          const busyEnd = busy.end;
-          
-          // Check if slot overlaps with busy interval
-          const overlap = slotStartUTC < busyEnd && slotEndUTC > busyStart;
-          
-          console.log(`  🔍 Checking against busy interval #${index + 1}:`);
-          logTime('    Busy Start', busyStart);
-          logTime('    Busy End  ', busyEnd);
-          console.log(`    Overlap? ${overlap ? 'YES 🚫' : 'No ✅'}`);
-          
-          if (overlap) {
+        for (const busy of busyIntervals) {
+          if (slotStartUTC < busy.end && slotEndUTC > busy.start) {
             isAvailable = false;
-            conflictFound = true;
-            console.log(`  🚨 CONFLICT DETECTED with event #${index + 1}`);
-            break; // No need to check other intervals
+            console.log(`🚨 CONFLICT: Slot ${slotKey} (${startTimeStr}-${endTimeStr} CST) overlaps with busy interval`);
+            console.log(`   Busy: ${busy.start.toISOString()} to ${busy.end.toISOString()}`);
+            break;
           }
         }
-        
-        if (!conflictFound) {
-          console.log('  ✅ No conflicts found');
-        }
-        
-        const startTimeStr = format(slotStartCST, 'h:mm a');
-        const endTimeStr = format(slotEndCST, 'h:mm a');
         
         // Add 30-minute slot
         slots.push({
@@ -233,61 +197,38 @@ function generateAvailableSlotsWithLogging(
           duration: 30
         });
         
-        console.log(`  ${isAvailable ? '✅ AVAILABLE' : '❌ BUSY'} - 30min slot`);
-        
-        // Create 60-minute slot if it doesn't go past 6PM
+        // Create 60-minute slot if within working hours
         if (minutes === 0 && hour < WORKING_HOURS.end - 1) {
           const slotEnd60CST = new Date(slotStartCST.getTime() + 60 * 60000);
           const slotEnd60UTC = new Date(slotStartUTC.getTime() + 60 * 60000);
           
-          console.log(`  ➕ Checking 60min extension for ${slotKey}`);
-          logTime('    60min End UTC', slotEnd60UTC);
-          
           let isAvailable60 = isAvailable;
-          let conflict60Found = false;
-          
-          // Check the second half of the 60min slot
           if (isAvailable) {
-            for (const [index, busy] of busyIntervals.entries()) {
-              const busyStart = busy.start;
-              const busyEnd = busy.end;
-              
-              // Check only the second half (30-60min) of the slot
-              const secondHalfStart = new Date(slotStartUTC.getTime() + 30 * 60000);
-              const overlap = secondHalfStart < busyEnd && slotEnd60UTC > busyStart;
-              
-              if (overlap) {
+            for (const busy of busyIntervals) {
+              if (slotEndUTC < busy.end && slotEnd60UTC > busy.start) {
                 isAvailable60 = false;
-                conflict60Found = true;
-                console.log(`    🚨 CONFLICT in second half with event #${index + 1}`);
+                console.log(`🚨 CONFLICT in 60min slot: ${slotKey} (${startTimeStr}-${format(slotEnd60CST, 'h:mm a')} CST)`);
+                console.log(`   Busy: ${busy.start.toISOString()} to ${busy.end.toISOString()}`);
                 break;
               }
             }
           }
           
-          if (!conflict60Found && isAvailable) {
-            console.log('    ✅ No conflicts in second half');
-          }
-          
           if (isAvailable60) {
-            const endTime60Str = format(slotEnd60CST, 'h:mm a');
-            
             slots.push({
               id: `${dateStr}-${slotKey}-60`,
               date: new Date(slotStartCST),
               startTime: startTimeStr,
-              endTime: endTime60Str,
+              endTime: format(slotEnd60CST, 'h:mm a'),
               isAvailable: true,
               duration: 60
             });
-            
-            console.log(`  ✅ ADDED 60min slot`);
-          } else {
-            console.log(`  ❌ Skipping 60min slot due to conflict`);
           }
         }
       }
     }
+    
+    current.setDate(current.getDate() + 1);
   }
 
   return slots;

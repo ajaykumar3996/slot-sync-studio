@@ -61,22 +61,25 @@ const serve_handler = async (req: Request): Promise<Response> => {
     const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
     console.log('🔑 Obtained Google access token');
 
-    // Fetch busy intervals from Google Calendar
-    console.log('📡 Fetching busy intervals from Google Calendar...');
-    const busyIntervals = await fetchBusyIntervals(accessToken, calendarId, startDate, endDate);
-    console.log(`📊 Fetched ${busyIntervals.length} busy intervals`);
+    // Fetch events from Google Calendar
+    console.log('📡 Fetching events from Google Calendar...');
+    const events = await fetchCalendarEvents(accessToken, calendarId, startDate, endDate);
+    console.log(`📊 Fetched ${events.length} events`);
     
-    // Log all busy intervals
-    busyIntervals.forEach((busy, index) => {
-      console.log(`📅 Busy Interval #${index + 1}:`);
-      logTime('  Start', busy.start);
-      logTime('  End  ', busy.end);
-      console.log(`  Duration: ${(busy.end.getTime() - busy.start.getTime()) / 60000} minutes`);
+    // Log all events with detailed information
+    events.forEach((event, index) => {
+      console.log(`📅 Event #${index + 1}: "${event.summary || 'No title'}"`);
+      const eventStart = new Date(event.start.dateTime || event.start.date);
+      const eventEnd = new Date(event.end.dateTime || event.end.date);
+      logTime('  Start', eventStart);
+      logTime('  End  ', eventEnd);
+      console.log(`  Duration: ${(eventEnd.getTime() - eventStart.getTime()) / 60000} minutes`);
+      console.log(`  All-day: ${!event.start.dateTime ? 'Yes' : 'No'}`);
     });
 
     // Generate available slots
     console.log('🔄 Generating available slots...');
-    const availableSlots = generateAvailableSlotsWithLogging(busyIntervals, startDate, endDate);
+    const availableSlots = generateAvailableSlotsWithEvents(events, startDate, endDate);
     console.log(`✅ Generated ${availableSlots.length} time slots`);
 
     return new Response(
@@ -93,56 +96,51 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 };
 
-// Fetch busy intervals using Google Calendar FreeBusy API
-async function fetchBusyIntervals(
+// Fetch events from Google Calendar Events API
+async function fetchCalendarEvents(
   accessToken: string,
   calendarId: string,
   startDate: string,
   endDate: string
-): Promise<{ start: Date; end: Date }[]> {
-  console.log('🌐 Calling FreeBusy API with:', {
+): Promise<any[]> {
+  console.log('🌐 Calling Events API with:', {
     timeMin: startDate,
     timeMax: endDate,
     calendarId
   });
 
-  const response = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-    method: 'POST',
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+  const params = new URLSearchParams({
+    timeMin: startDate,
+    timeMax: endDate,
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    timeZone: CST_TIMEZONE
+  });
+
+  const response = await fetch(`${url}?${params}`, {
+    method: 'GET',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      timeMin: startDate,
-      timeMax: endDate,
-      items: [{ id: calendarId }],
-      timeZone: CST_TIMEZONE
-    })
+    }
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`❌ FreeBusy API failed: ${response.status} ${response.statusText}`, errorText);
-    throw new Error(`FreeBusy API failed: ${response.status} ${errorText}`);
+    console.error(`❌ Events API failed: ${response.status} ${response.statusText}`, errorText);
+    throw new Error(`Events API failed: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
-  const calendarData = data.calendars[calendarId];
+  console.log(`✅ Events API response: Found ${data.items?.length || 0} events`);
   
-  if (calendarData.errors) {
-    console.error('❌ Calendar errors:', calendarData.errors);
-    throw new Error('Error fetching calendar data');
-  }
-
-  return (calendarData.busy || []).map((busy: any) => ({
-    start: new Date(busy.start),
-    end: new Date(busy.end)
-  }));
+  return data.items || [];
 }
 
-// Generate available slots with detailed logging
-function generateAvailableSlotsWithLogging(
-  busyIntervals: { start: Date; end: Date }[],
+// Generate available slots with detailed logging using events
+function generateAvailableSlotsWithEvents(
+  events: any[],
   startDate: string,
   endDate: string
 ): TimeSlot[] {
@@ -186,38 +184,47 @@ function generateAvailableSlotsWithLogging(
         const slotStartUTC = new Date(slotStartCST.getTime() + cstOffsetMs);
         const slotEndUTC = new Date(slotStartUTC.getTime() + 30 * 60000);
         
-        console.log(`\n🕒 Slot: ${slotKey} (${format(slotStartCST, 'h:mm a')} - ${format(slotEndCST, 'h:mm a')} CST)`);
-        logTime('  CST Start', slotStartCST);
-        logTime('  CST End  ', slotEndCST);
-        logTime('  UTC Start', slotStartUTC);
-        logTime('  UTC End  ', slotEndUTC);
+        console.log(`\n🔍 DEBUGGING SLOT CONFLICT DETECTION:`);
+        console.log(`📅 Checking slot: ${slotKey} on ${dateStr}`);
+        console.log(`🕒 Slot times (CST): ${format(slotStartCST, 'h:mm a')} - ${format(slotEndCST, 'h:mm a')}`);
+        console.log(`🌍 Slot times (UTC): ${slotStartUTC.toISOString()} - ${slotEndUTC.toISOString()}`);
+        console.log(`📊 Total events to check: ${events.length}`);
         
-        // Check for conflicts
+        // Check for conflicts with Google Calendar events
         let isAvailable = true;
-        let conflictFound = false;
-        
-        for (const [index, busy] of busyIntervals.entries()) {
-          const busyStart = busy.start;
-          const busyEnd = busy.end;
+        for (const [eventIndex, event] of events.entries()) {
+          const eventStart = new Date(event.start.dateTime || event.start.date);
+          const eventEnd = new Date(event.end.dateTime || event.end.date);
           
-          // Check if slot overlaps with busy interval
-          const overlap = slotStartUTC < busyEnd && slotEndUTC > busyStart;
+          console.log(`\n📅 Event #${eventIndex + 1}: "${event.summary || 'No title'}"`);
+          console.log(`   📍 Event start (UTC): ${eventStart.toISOString()}`);
+          console.log(`   📍 Event end (UTC):   ${eventEnd.toISOString()}`);
+          console.log(`   📍 Event start (CST): ${eventStart.toLocaleString('en-US', { timeZone: CST_TIMEZONE })}`);
+          console.log(`   📍 Event end (CST):   ${eventEnd.toLocaleString('en-US', { timeZone: CST_TIMEZONE })}`);
           
-          console.log(`  🔍 Checking against busy interval #${index + 1}:`);
-          logTime('    Busy Start', busyStart);
-          logTime('    Busy End  ', busyEnd);
-          console.log(`    Overlap? ${overlap ? 'YES 🚫' : 'No ✅'}`);
+          // Check if slot overlaps with event
+          const overlap = slotStartUTC < eventEnd && slotEndUTC > eventStart;
+          
+          console.log(`\n🔄 OVERLAP CALCULATION:`);
+          console.log(`   ❓ Is slotStart < eventEnd? ${slotStartUTC.toISOString()} < ${eventEnd.toISOString()} = ${slotStartUTC < eventEnd}`);
+          console.log(`   ❓ Is slotEnd > eventStart? ${slotEndUTC.toISOString()} > ${eventStart.toISOString()} = ${slotEndUTC > eventStart}`);
+          console.log(`   ❓ Both conditions true (overlap)? ${overlap}`);
           
           if (overlap) {
             isAvailable = false;
-            conflictFound = true;
-            console.log(`  🚨 CONFLICT DETECTED with event #${index + 1}`);
-            break; // No need to check other intervals
+            console.log(`   🚨 CONFLICT DETECTED! Slot marked as UNAVAILABLE due to event: "${event.summary || 'No title'}"`);
+            console.log(`   💡 Conflict reason: Slot overlaps with this event`);
+            break;
+          } else {
+            console.log(`   ✅ No conflict with this event`);
           }
         }
         
-        if (!conflictFound) {
-          console.log('  ✅ No conflicts found');
+        console.log(`\n📊 FINAL RESULT for slot ${slotKey}: ${isAvailable ? '✅ AVAILABLE' : '❌ BLOCKED'}`);
+        if (!isAvailable) {
+          console.log(`❌ This slot will appear as BLOCKED in the interface`);
+        } else {
+          console.log(`✅ This slot will appear as AVAILABLE with Book button`);
         }
         
         const startTimeStr = format(slotStartCST, 'h:mm a');
@@ -241,32 +248,25 @@ function generateAvailableSlotsWithLogging(
           const slotEnd60UTC = new Date(slotStartUTC.getTime() + 60 * 60000);
           
           console.log(`  ➕ Checking 60min extension for ${slotKey}`);
-          logTime('    60min End UTC', slotEnd60UTC);
           
           let isAvailable60 = isAvailable;
-          let conflict60Found = false;
           
-          // Check the second half of the 60min slot
+          // Check the second half of the 60min slot if first half is available
           if (isAvailable) {
-            for (const [index, busy] of busyIntervals.entries()) {
-              const busyStart = busy.start;
-              const busyEnd = busy.end;
+            for (const [eventIndex, event] of events.entries()) {
+              const eventStart = new Date(event.start.dateTime || event.start.date);
+              const eventEnd = new Date(event.end.dateTime || event.end.date);
               
               // Check only the second half (30-60min) of the slot
               const secondHalfStart = new Date(slotStartUTC.getTime() + 30 * 60000);
-              const overlap = secondHalfStart < busyEnd && slotEnd60UTC > busyStart;
+              const overlap = secondHalfStart < eventEnd && slotEnd60UTC > eventStart;
               
               if (overlap) {
                 isAvailable60 = false;
-                conflict60Found = true;
-                console.log(`    🚨 CONFLICT in second half with event #${index + 1}`);
+                console.log(`    🚨 CONFLICT in second half with event: "${event.summary || 'No title'}"`);
                 break;
               }
             }
-          }
-          
-          if (!conflict60Found && isAvailable) {
-            console.log('    ✅ No conflicts in second half');
           }
           
           if (isAvailable60) {

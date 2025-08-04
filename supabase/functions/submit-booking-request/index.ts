@@ -75,9 +75,36 @@ const serve_handler = async (req: Request): Promise<Response> => {
     const approvalUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
     const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
-    const resumeDownloadUrl = bookingData.resume_file_path 
-      ? `${supabaseUrl}/storage/v1/object/resumes/${bookingData.resume_file_path}`
-      : null;
+    // Prepare resume attachment if available
+    let resumeAttachment = null;
+    if (bookingData.resume_file_path) {
+      try {
+        // Download the resume file from storage
+        const { data: resumeData, error: resumeError } = await supabase.storage
+          .from('resumes')
+          .download(bookingData.resume_file_path);
+        
+        if (!resumeError && resumeData) {
+          // Convert file to base64 for email attachment
+          const resumeArrayBuffer = await resumeData.arrayBuffer();
+          const resumeBase64 = btoa(String.fromCharCode(...new Uint8Array(resumeArrayBuffer)));
+          
+          // Get original filename from path
+          const originalFilename = bookingData.resume_file_path.split('/').pop() || 'resume.pdf';
+          
+          resumeAttachment = {
+            filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${originalFilename.split('.').pop()}`,
+            content: resumeBase64,
+            type: resumeData.type || 'application/pdf',
+            disposition: 'attachment'
+          };
+        } else {
+          console.error('Failed to download resume:', resumeError);
+        }
+      } catch (error) {
+        console.error('Error processing resume attachment:', error);
+      }
+    }
 
     const emailResponse = await resend.emails.send({
       from: "BookMySlot <anand@bookmyslot.me>",
@@ -103,7 +130,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
           <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
           <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
           
-          ${resumeDownloadUrl ? `<h3>Resume</h3><p><a href="${resumeDownloadUrl}" target="_blank" style="background: #3b82f6; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px;">📄 Download Resume</a></p>` : ''}
+          ${resumeAttachment ? `<h3>Resume</h3><p>📄 Resume is attached to this email</p>` : '<p><em>⚠️ No resume was uploaded</em></p>'}
           
           ${bookingData.message ? `<h3>Additional Message</h3><p>${bookingData.message}</p>` : ''}
         </div>
@@ -123,6 +150,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
           Click the buttons above to approve or reject this booking request.
         </p>
       `,
+      ...(resumeAttachment ? { attachments: [resumeAttachment] } : {}),
     });
 
     console.log('Approval email sent successfully:', emailResponse);

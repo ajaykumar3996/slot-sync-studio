@@ -169,7 +169,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             </p>
           </div>
         )}
-        <div className={`relative ${isWeekend ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`relative ${isWeekend ? 'opacity-50' : ''}`}>
           {/* Time Grid */}
           <div className="border border-border rounded-lg overflow-hidden bg-background">
             {hours.map((hour, index) => (
@@ -186,7 +186,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* First 30-minute slot */}
                   <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center z-10">
-                    {isSlotAvailable(hour, 0, 30) ? (
+                    {!isWeekend && isSlotAvailable(hour, 0, 30) ? (
                       <Button 
                         size="sm" 
                         variant="ghost" 
@@ -195,14 +195,14 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       >
                         Book 30m
                       </Button>
-                    ) : (
+                    ) : !isWeekend ? (
                       <div className="text-xs text-muted-foreground/50">Busy</div>
-                    )}
+                    ) : null}
                   </div>
                   
                   {/* Second 30-minute slot */}
                   <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
-                    {isSlotAvailable(hour, 30, 30) ? (
+                    {!isWeekend && isSlotAvailable(hour, 30, 30) ? (
                       <Button 
                         size="sm" 
                         variant="ghost" 
@@ -211,13 +211,13 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       >
                         Book 30m
                       </Button>
-                    ) : (
+                    ) : !isWeekend ? (
                       <div className="text-xs text-muted-foreground/50">Busy</div>
-                    )}
+                    ) : null}
                   </div>
                   
                   {/* 1-hour slot button (centered) */}
-                  {isSlotAvailable(hour, 0, 60) && (
+                  {!isWeekend && isSlotAvailable(hour, 0, 60) && (
                     <div className="absolute inset-0 flex items-center justify-end pr-2 z-15">
                       <Button 
                         size="sm" 

@@ -74,15 +74,32 @@ const serve_handler = async (req: Request): Promise<Response> => {
         
         const isApproved = action === 'approve';
         const subject = isApproved 
-          ? `Booking Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
+          ? `Meeting Request Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
           : `Booking Request Declined - ${bookingRequest.slot_date}`;
 
         console.log(`Sending ${isApproved ? 'approval' : 'rejection'} email to ${bookingRequest.user_email} using Resend`);
         
+        // Chrome Remote Desktop instructions for approved bookings
+        const chromeRemoteDesktopInstructions = isApproved ? `
+          <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px; color: #856404; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #856404;">For Interviews (Please use windows laptop, faced multiple connection issues with mac earlier)</h3>
+            <p><strong>Instructions:</strong></p>
+            <p>Download chrome Remote Desktop application on your laptop and -</p>
+            <ol style="margin-left: 20px;">
+              <li>Create a dummy Gmail account<br>(I ask this because i will be logging into the chrome remote desktop using these credentials, if you are okay sharing your personal email id and credentials, you can skip this)</li>
+              <li>Login to chrome Remote Desktop using these credentials</li>
+              <li>Select "Remote Access" on the left and click "Turn on" for Set up remote access.</li>
+              <li>Set up a six digit custom pin, click "Start"</li>
+            </ol>
+            <p><strong>Please share these credentials and the six digit pin with me.</strong></p>
+            <p>I will send you the otter link before the interview starts.</p>
+          </div>
+        ` : '';
+        
         // Create email content with calendar link for approved bookings
         const calendarSection = isApproved ? `
           <div style="background: #dcfce7; border: 1px solid #22c55e; padding: 15px; border-radius: 6px; color: #15803d; margin: 20px 0;">
-            <p><strong>✅ Your booking has been confirmed!</strong></p>
+            <p><strong>✅ Your meeting request has been confirmed!</strong></p>
             <p>Click the button below to add this appointment to your Google Calendar:</p>
             <div style="margin: 15px 0;">
               <a href="${createGoogleCalendarEventUrl(bookingRequest)}" 
@@ -101,11 +118,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
         `;
 
         const emailResult = await resend.emails.send({
-          from: 'BookMySlot <anand@bookmyslot.me>',
+          from: 'Book My Slot <anand@bookmyslot.me>',
           to: [bookingRequest.user_email],
           subject,
           html: `
-            <h2>Booking ${isApproved ? 'Confirmed' : 'Declined'}</h2>
+            <h2>Meeting Request ${isApproved ? 'Confirmed' : 'Declined'}</h2>
             <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
               <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
               <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
@@ -115,9 +132,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
             
             ${calendarSection}
             
+            ${chromeRemoteDesktopInstructions}
+            
             <p style="margin-top: 20px;">
-              Best regards,<br>
-              ITmate.ai Team
+              Best Regards,<br>
+              Anand
             </p>
           `,
         });

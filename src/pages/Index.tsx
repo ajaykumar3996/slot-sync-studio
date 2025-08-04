@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { SlotCalendar } from "@/components/SlotCalendar";
 import { BookingModal } from "@/components/BookingModal";
-
 interface TimeSlot {
   id: string;
   date: Date;
@@ -10,40 +9,27 @@ interface TimeSlot {
   isAvailable: boolean;
   duration: number;
 }
-
 const Index = () => {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
   const handleSlotSelect = (slot: TimeSlot) => {
     setSelectedSlot(slot);
     setIsModalOpen(true);
   };
-
   const handleModalClose = () => {
     setIsModalOpen(false);
     setSelectedSlot(null);
   };
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-4">Book a Time Slot</h1>
-          <p className="text-xl text-muted-foreground">
-            Select an available time slot to schedule your meeting
-          </p>
+          <p className="text-xl text-muted-foreground">Select an available time slot to schedule your meeting ( All the timeslots below are in CST)</p>
         </div>
         
         <SlotCalendar onSlotSelect={handleSlotSelect} />
-        <BookingModal 
-          slot={selectedSlot} 
-          isOpen={isModalOpen} 
-          onClose={handleModalClose} 
-        />
+        <BookingModal slot={selectedSlot} isOpen={isModalOpen} onClose={handleModalClose} />
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;

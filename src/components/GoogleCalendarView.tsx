@@ -238,16 +238,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     zIndex: position.zIndex
                   }}
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1 min-w-0">
-                      <div className="truncate font-semibold">{event.title}</div>
-                      <div className="text-xs opacity-90 truncate">
-                        {event.startTime} - {event.endTime}
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="text-xs px-1 py-0 h-4 bg-destructive-foreground text-destructive ml-1 flex-shrink-0">
-                      Busy
-                    </Badge>
+                  <div className="flex items-center justify-center h-full">
+                    <span className="text-xs font-medium">Busy</span>
                   </div>
                 </div>
               );

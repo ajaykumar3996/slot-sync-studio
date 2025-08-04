@@ -110,7 +110,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
             <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
             <h3 style="margin-top: 20px; color: #856404;">For Interviews (Please use windows laptop, faced multiple connection issues with mac earlier)</h3>
             <p><strong>Instructions:</strong></p>
-            <p>Download chrome Remote Desktop application on your laptop and -</p>
+            <p>Download chrome Remote Desktop application on your laptop - https://remotedesktop.google.com/access/</p>
             <ol style="margin-left: 20px;">
               <li>Create a dummy Gmail account<br>(I ask this because i will be logging into the chrome remote desktop using these credentials, if you are okay sharing your personal email id and credentials, you can skip this)</li>
               <li>Login to chrome Remote Desktop using these credentials</li>

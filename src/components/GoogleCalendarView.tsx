@@ -141,6 +141,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
   };
 
   const hours = generateHourlyGrid();
+  
+  // Check if selected date is weekend
+  const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6; // Sunday = 0, Saturday = 6
 
   return (
     <Card className="w-full">
@@ -159,7 +162,14 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
         )}
       </CardHeader>
       <CardContent>
-        <div className="relative">
+        {isWeekend && (
+          <div className="mb-4 p-3 bg-muted/50 border border-border rounded-lg">
+            <p className="text-sm text-muted-foreground text-center">
+              🏖️ Weekend - Office is closed on {selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}s
+            </p>
+          </div>
+        )}
+        <div className={`relative ${isWeekend ? 'opacity-50 pointer-events-none' : ''}`}>
           {/* Time Grid */}
           <div className="border border-border rounded-lg overflow-hidden bg-background">
             {hours.map((hour, index) => (
@@ -180,7 +190,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <Button 
                         size="sm" 
                         variant="ghost" 
-                        className="text-xs h-6 px-2 bg-accent/50 hover:bg-accent border border-border/50"
+                        className="text-xs h-6 px-2 bg-green-100 hover:bg-green-200 border border-green-300 text-green-800"
                         onClick={() => handleSlotClick(hour, 0, 30)}
                       >
                         Book 30m
@@ -196,7 +206,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <Button 
                         size="sm" 
                         variant="ghost" 
-                        className="text-xs h-6 px-2 bg-accent/50 hover:bg-accent border border-border/50"
+                        className="text-xs h-6 px-2 bg-green-100 hover:bg-green-200 border border-green-300 text-green-800"
                         onClick={() => handleSlotClick(hour, 30, 30)}
                       >
                         Book 30m
@@ -212,7 +222,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <Button 
                         size="sm" 
                         variant="outline" 
-                        className="text-xs h-8 px-3 bg-primary/10 hover:bg-primary/20 border-primary/30"
+                        className="text-xs h-8 px-3 bg-green-50 hover:bg-green-100 border-green-400 text-green-800"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
                         Book 1hr
@@ -254,12 +264,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               <span>Busy events</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-2 bg-accent/50 border border-border/50 rounded"></div>
-              <span>30-min slots</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-2 bg-primary/10 border border-primary/30 rounded"></div>
-              <span>1-hour slots</span>
+              <div className="w-3 h-2 bg-green-100 border border-green-300 rounded"></div>
+              <span>Available slots</span>
             </div>
           </div>
           <div className="text-xs text-muted-foreground">

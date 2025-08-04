@@ -91,12 +91,17 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
     const startMinutes = event.startHour * 60 + event.startMinute;
     const endMinutes = event.endHour * 60 + event.endMinute;
     const startTime = 8 * 60; // 8 AM in minutes
-    const totalMinutes = 10 * 60; // 10 hours (8 AM to 6 PM)
+    const pixelsPerHour = 64; // 64px per hour (h-16 = 64px)
+    const totalHours = 11; // 8 AM to 7 PM (11 hours total)
     
-    const top = ((startMinutes - startTime) / totalMinutes) * 100;
-    const height = ((endMinutes - startMinutes) / totalMinutes) * 100;
+    const topPixels = ((startMinutes - startTime) / 60) * pixelsPerHour;
+    const heightPixels = ((endMinutes - startMinutes) / 60) * pixelsPerHour;
     
-    return { top: `${top}%`, height: `${height}%` };
+    return { 
+      top: `${topPixels}px`, 
+      height: `${heightPixels}px`,
+      zIndex: 10
+    };
   };
 
   const handleSlotClick = (hour: number, minute: number, duration: 30 | 60) => {
@@ -157,43 +162,50 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             {hours.map((hour, index) => (
               <div key={hour} className="relative border-b border-border last:border-b-0">
                 {/* Hour Label */}
-                <div className="absolute left-0 top-0 w-16 h-16 flex items-start justify-center pt-1 text-xs text-muted-foreground bg-muted/50 border-r border-border">
+                <div className="absolute left-0 top-0 w-16 h-16 flex items-start justify-center pt-1 text-xs text-muted-foreground bg-muted/50 border-r border-border z-20">
                   {convertTo12Hour(hour)}
                 </div>
                 
                 {/* Time Slots */}
                 <div className="ml-16 relative h-16">
-                  {/* 30-minute slots */}
+                  {/* 30-minute slot indicators - always visible */}
+                  <div className="absolute top-0 left-0 right-0 h-8 border-b border-dashed border-border/40"></div>
+                  <div className="absolute bottom-0 left-0 right-0 h-8"></div>
+                  
+                  {/* Clickable 30-minute slots */}
                   <div 
-                    className="absolute top-0 left-0 right-0 h-8 border-b border-border/30 hover:bg-accent/10 cursor-pointer group"
+                    className="absolute top-0 left-0 right-0 h-8 hover:bg-accent/20 cursor-pointer group transition-colors z-10"
                     onClick={() => handleSlotClick(hour, 0, 30)}
                   >
-                    <div className="hidden group-hover:flex items-center justify-center h-full">
-                      <Button size="sm" variant="ghost" className="text-xs">
-                        Book 30min
-                      </Button>
+                    <div className="flex items-center justify-center h-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Badge variant="secondary" className="text-xs px-2 py-1">
+                        <Plus className="w-3 h-3 mr-1" />
+                        30min
+                      </Badge>
                     </div>
                   </div>
                   <div 
-                    className="absolute bottom-0 left-0 right-0 h-8 hover:bg-accent/10 cursor-pointer group"
+                    className="absolute bottom-0 left-0 right-0 h-8 hover:bg-accent/20 cursor-pointer group transition-colors z-10"
                     onClick={() => handleSlotClick(hour, 30, 30)}
                   >
-                    <div className="hidden group-hover:flex items-center justify-center h-full">
-                      <Button size="sm" variant="ghost" className="text-xs">
-                        Book 30min
-                      </Button>
+                    <div className="flex items-center justify-center h-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Badge variant="secondary" className="text-xs px-2 py-1">
+                        <Plus className="w-3 h-3 mr-1" />
+                        30min
+                      </Badge>
                     </div>
                   </div>
                   
                   {/* 1-hour slot overlay */}
                   <div 
-                    className="absolute inset-0 hover:bg-primary/5 cursor-pointer group opacity-0 hover:opacity-100"
+                    className="absolute inset-0 hover:bg-primary/10 cursor-pointer group transition-colors z-5"
                     onClick={() => handleSlotClick(hour, 0, 60)}
                   >
-                    <div className="flex items-center justify-center h-full">
-                      <Button size="sm" variant="outline" className="text-xs">
-                        Book 1hr
-                      </Button>
+                    <div className="flex items-center justify-center h-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Badge variant="outline" className="text-xs px-3 py-1 bg-background">
+                        <Plus className="w-3 h-3 mr-1" />
+                        1 hour
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -208,16 +220,22 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               return (
                 <div
                   key={event.id}
-                  className="absolute left-1 right-1 bg-primary text-primary-foreground rounded px-2 py-1 text-xs font-medium shadow-sm border pointer-events-auto"
+                  className="absolute left-1 right-1 bg-destructive text-destructive-foreground rounded-md px-2 py-1 text-xs font-medium shadow-md border border-destructive/20 pointer-events-auto"
                   style={{
                     top: position.top,
                     height: position.height,
-                    minHeight: '20px'
+                    minHeight: '24px',
+                    zIndex: position.zIndex
                   }}
                 >
-                  <div className="truncate font-medium">{event.title}</div>
-                  <div className="text-xs opacity-90">
+                  <div className="truncate font-semibold">{event.title}</div>
+                  <div className="text-xs opacity-90 truncate">
                     {event.startTime} - {event.endTime}
+                  </div>
+                  <div className="absolute top-1 right-1">
+                    <Badge variant="outline" className="text-xs px-1 py-0 h-4 bg-destructive-foreground text-destructive">
+                      Busy
+                    </Badge>
                   </div>
                 </div>
               );
@@ -225,8 +243,24 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           </div>
         </div>
         
-        <div className="mt-4 text-xs text-muted-foreground">
-          Hover over empty time slots to book appointments. Click on 30min slots for half-hour bookings or 1hr for full-hour bookings.
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-destructive rounded"></div>
+              <span>Busy slots</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 border-2 border-dashed border-border rounded"></div>
+              <span>30-min slots</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Plus className="w-3 h-3" />
+              <span>Hover to book</span>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Hover over empty time slots to book appointments. Dashed lines show 30-minute boundaries.
+          </div>
         </div>
       </CardContent>
     </Card>

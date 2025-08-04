@@ -135,7 +135,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg max-w-[90vw] w-full">
+      <DialogContent className="sm:max-w-lg max-w-[95vw] w-full">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />

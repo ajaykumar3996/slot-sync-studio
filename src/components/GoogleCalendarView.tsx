@@ -218,11 +218,11 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* 1-hour slot button (positioned to avoid overlap) */}
                   {!isWeekend && isSlotAvailable(hour, 0, 60) && (
-                    <div className="absolute left-1/4 right-1/4 top-1/2 transform -translate-y-1/2 flex items-center justify-right z-20 pointer-events-none">
+                    <div className="absolute hr-block inset-0 flex items-center justify-right z-20 pointer-events-none">
                       <Button 
                         size="sm" 
                         variant="outline" 
-                        className="text-xs h-8 px-3 bg-green-50 hover:bg-green-100 border-green-400 text-green-800 pointer-events-auto"
+                        className="text-xs h-10 px-4 bg-green-50 hover:bg-green-100 border-green-400 text-green-800 pointer-events-auto"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
                         Book 1hr

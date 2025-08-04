@@ -97,7 +97,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
           <div style="background: #fef2f2; border: 1px solid #ef4444; padding: 15px; border-radius: 6px; color: #dc2626;">
             <p><strong>❌ Your booking request has been declined.</strong></p>
             <p>Please contact Anand for more details about rescheduling or alternative arrangements.</p>
-            <p><strong>Contact:</strong> anand@bookmyslot.me</p>
+            <p><strong>Contact:</strong> +91 8466998882 (Whatsapp Only)</p>
           </div>
         `;
 

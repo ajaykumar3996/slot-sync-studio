@@ -96,22 +96,19 @@ const serve_handler = async (req: Request): Promise<Response> => {
         ` : `
           <div style="background: #fef2f2; border: 1px solid #ef4444; padding: 15px; border-radius: 6px; color: #dc2626;">
             <p><strong>❌ Your booking request has been declined.</strong></p>
-            <p>Please try booking a different time slot that may work better.</p>
+            <p>Please contact Anand for more details about rescheduling or alternative arrangements.</p>
+            <p><strong>Contact:</strong> anand@bookmyslot.me</p>
           </div>
         `;
 
-        const emailResult = await resend.emails.send({
-          from: 'Book My Slot <anand@bookmyslot.me>',
-          to: [bookingRequest.user_email],
-          subject,
-          html: `
-            <h2>Meeting Request ${isApproved ? 'Confirmed' : 'Declined'}</h2>
-            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
-              <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
-              <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
-              <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
-              <h3 style="margin-top: 0; color: #856404;">For Interviews (Please use windows laptop, faced multiple connection issues with mac earlier)</h3>
+        // Create interview instructions section only for approved bookings
+        const interviewInstructions = isApproved ? `
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
+            <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
+            <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
+            <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
+            <h3 style="margin-top: 20px; color: #856404;">For Interviews (Please use windows laptop, faced multiple connection issues with mac earlier)</h3>
             <p><strong>Instructions:</strong></p>
             <p>Download chrome Remote Desktop application on your laptop and -</p>
             <ol style="margin-left: 20px;">
@@ -122,11 +119,24 @@ const serve_handler = async (req: Request): Promise<Response> => {
             </ol>
             <p><strong>Please share these credentials and the six digit pin with me.</strong></p>
             <p>I will send you the otter link before the interview starts.</p>
-            </div>
-            
+          </div>
+        ` : `
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
+            <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
+            <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
+            <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
+          </div>
+        `;
+
+        const emailResult = await resend.emails.send({
+          from: 'Book My Slot <anand@bookmyslot.me>',
+          to: [bookingRequest.user_email],
+          subject,
+          html: `
+            <h2>Meeting Request ${isApproved ? 'Confirmed' : 'Declined'}</h2>
+            ${interviewInstructions}
             ${calendarSection}
-            
-            
             <p style="margin-top: 20px;">
               Best Regards,<br>
               Anand

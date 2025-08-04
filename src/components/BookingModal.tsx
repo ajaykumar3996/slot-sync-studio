@@ -263,7 +263,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
                 accept=".pdf,.doc,.docx"
                 onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
                 required
-                className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+                className="h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
               />
               {resumeFile && (
                 <p className="text-sm text-muted-foreground">Selected: {resumeFile.name}</p>

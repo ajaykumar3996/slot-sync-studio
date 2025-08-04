@@ -34,7 +34,12 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
             mode="single"
             selected={selectedDate}
             onSelect={setSelectedDate}
-            disabled={(date) => date < new Date()}
+            disabled={(date) => {
+              // Disable past dates and weekends (Saturday = 6, Sunday = 0)
+              const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+              const isPast = date < new Date();
+              return isPast || isWeekend;
+            }}
             className="rounded-md border"
           />
         </CardContent>

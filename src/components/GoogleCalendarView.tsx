@@ -72,58 +72,58 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
     fetchDayEvents();
   }, [selectedDate]);
 
-  const generateTimeSlots = () => {
-    const slots = [];
-    const workingHours = { start: 8, end: 18 }; // 8 AM to 6 PM
-    
-    for (let hour = workingHours.start; hour < workingHours.end; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const startTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        const endHour = minute === 30 ? hour + 1 : hour;
-        const endMinute = minute === 30 ? 0 : 30;
-        const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
-        
-        // Check if this slot conflicts with any event
-        const isBlocked = events.some(event => {
-          const slotStart = hour * 60 + minute;
-          const slotEnd = endHour * 60 + endMinute;
-          const eventStart = event.startHour * 60 + event.startMinute;
-          const eventEnd = event.endHour * 60 + event.endMinute;
-          
-          return slotStart < eventEnd && slotEnd > eventStart;
-        });
-        
-        slots.push({
-          hour,
-          minute,
-          startTime,
-          endTime,
-          isBlocked,
-          eventTitle: isBlocked ? events.find(event => {
-            const slotStart = hour * 60 + minute;
-            const slotEnd = endHour * 60 + endMinute;
-            const eventStart = event.startHour * 60 + event.startMinute;
-            const eventEnd = event.endHour * 60 + event.endMinute;
-            return slotStart < eventEnd && slotEnd > eventStart;
-          })?.title : null
-        });
-      }
+  const generateHourlyGrid = () => {
+    const hours = [];
+    for (let i = 8; i <= 18; i++) {
+      hours.push(i);
     }
-    
-    return slots;
+    return hours;
   };
 
-  const handleSlotBook = (slot: any, duration: 30 | 60) => {
-    const endMinutes = slot.minute + duration;
-    const endHour = slot.hour + Math.floor(endMinutes / 60);
-    const finalEndMinute = endMinutes % 60;
+  const convertTo12Hour = (hour: number) => {
+    if (hour === 0) return "12 AM";
+    if (hour < 12) return `${hour} AM`;
+    if (hour === 12) return "12 PM";
+    return `${hour - 12} PM`;
+  };
+
+  const getEventPosition = (event: CalendarEvent) => {
+    const startMinutes = event.startHour * 60 + event.startMinute;
+    const endMinutes = event.endHour * 60 + event.endMinute;
+    const startTime = 8 * 60; // 8 AM in minutes
+    const totalMinutes = 10 * 60; // 10 hours (8 AM to 6 PM)
     
-    const endTime = `${endHour.toString().padStart(2, '0')}:${finalEndMinute.toString().padStart(2, '0')}`;
+    const top = ((startMinutes - startTime) / totalMinutes) * 100;
+    const height = ((endMinutes - startMinutes) / totalMinutes) * 100;
+    
+    return { top: `${top}%`, height: `${height}%` };
+  };
+
+  const handleSlotClick = (hour: number, minute: number, duration: 30 | 60) => {
+    // Check if the slot is available
+    const slotStart = hour * 60 + minute;
+    const slotEnd = slotStart + duration;
+    
+    const isBlocked = events.some(event => {
+      const eventStart = event.startHour * 60 + event.startMinute;
+      const eventEnd = event.endHour * 60 + event.endMinute;
+      return slotStart < eventEnd && slotEnd > eventStart;
+    });
+
+    if (isBlocked) {
+      toast({ title: "Slot Unavailable", description: "This time slot conflicts with an existing event", variant: "destructive" });
+      return;
+    }
+
+    const startTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const endHour = Math.floor((slotStart + duration) / 60);
+    const endMinute = (slotStart + duration) % 60;
+    const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
     
     const timeSlot: TimeSlot = {
-      id: `${selectedDate.toISOString()}-${slot.startTime}`,
+      id: `${selectedDate.toISOString()}-${startTime}`,
       date: selectedDate,
-      startTime: slot.startTime,
+      startTime,
       endTime,
       isAvailable: true,
       duration
@@ -132,10 +132,10 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
     onSlotSelect(timeSlot);
   };
 
-  const timeSlots = generateTimeSlots();
+  const hours = generateHourlyGrid();
 
   return (
-    <Card>
+    <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Clock className="h-5 w-5" />
@@ -151,49 +151,82 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
         )}
       </CardHeader>
       <CardContent>
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {timeSlots.map((slot, index) => (
-            <div key={index} className="flex items-center justify-between p-2 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-mono w-20">
-                  {slot.startTime}
-                </span>
-                {slot.isBlocked ? (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">Busy</Badge>
-                    <span className="text-sm text-muted-foreground truncate">
-                      {slot.eventTitle}
-                    </span>
-                  </div>
-                ) : (
-                  <Badge variant="default" className="bg-green-600">Available</Badge>
-                )}
-              </div>
-              
-              {!slot.isBlocked && (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleSlotBook(slot, 30)}
-                    className="text-xs"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    30min
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleSlotBook(slot, 60)}
-                    className="text-xs"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    1hr
-                  </Button>
+        <div className="relative">
+          {/* Time Grid */}
+          <div className="border border-border rounded-lg overflow-hidden bg-background">
+            {hours.map((hour, index) => (
+              <div key={hour} className="relative border-b border-border last:border-b-0">
+                {/* Hour Label */}
+                <div className="absolute left-0 top-0 w-16 h-16 flex items-start justify-center pt-1 text-xs text-muted-foreground bg-muted/50 border-r border-border">
+                  {convertTo12Hour(hour)}
                 </div>
-              )}
-            </div>
-          ))}
+                
+                {/* Time Slots */}
+                <div className="ml-16 relative h-16">
+                  {/* 30-minute slots */}
+                  <div 
+                    className="absolute top-0 left-0 right-0 h-8 border-b border-border/30 hover:bg-accent/10 cursor-pointer group"
+                    onClick={() => handleSlotClick(hour, 0, 30)}
+                  >
+                    <div className="hidden group-hover:flex items-center justify-center h-full">
+                      <Button size="sm" variant="ghost" className="text-xs">
+                        Book 30min
+                      </Button>
+                    </div>
+                  </div>
+                  <div 
+                    className="absolute bottom-0 left-0 right-0 h-8 hover:bg-accent/10 cursor-pointer group"
+                    onClick={() => handleSlotClick(hour, 30, 30)}
+                  >
+                    <div className="hidden group-hover:flex items-center justify-center h-full">
+                      <Button size="sm" variant="ghost" className="text-xs">
+                        Book 30min
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* 1-hour slot overlay */}
+                  <div 
+                    className="absolute inset-0 hover:bg-primary/5 cursor-pointer group opacity-0 hover:opacity-100"
+                    onClick={() => handleSlotClick(hour, 0, 60)}
+                  >
+                    <div className="flex items-center justify-center h-full">
+                      <Button size="sm" variant="outline" className="text-xs">
+                        Book 1hr
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {/* Events Overlay */}
+          <div className="absolute inset-0 ml-16 pointer-events-none">
+            {events.map((event) => {
+              const position = getEventPosition(event);
+              return (
+                <div
+                  key={event.id}
+                  className="absolute left-1 right-1 bg-primary text-primary-foreground rounded px-2 py-1 text-xs font-medium shadow-sm border pointer-events-auto"
+                  style={{
+                    top: position.top,
+                    height: position.height,
+                    minHeight: '20px'
+                  }}
+                >
+                  <div className="truncate font-medium">{event.title}</div>
+                  <div className="text-xs opacity-90">
+                    {event.startTime} - {event.endTime}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        
+        <div className="mt-4 text-xs text-muted-foreground">
+          Hover over empty time slots to book appointments. Click on 30min slots for half-hour bookings or 1hr for full-hour bookings.
         </div>
       </CardContent>
     </Card>

@@ -107,7 +107,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     }
 
     const emailResponse = await resend.emails.send({
-      from: "BookMySlot <anand@bookmyslot.me>",
+      from: "Book My Slot <anand@bookmyslot.me>",
       to: ["itmate.ai@gmail.com"],
       subject: `New Booking Request - ${bookingData.role_name} at ${bookingData.client_name}`,
       html: `

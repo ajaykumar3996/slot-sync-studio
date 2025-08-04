@@ -160,7 +160,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 max-h-96 overflow-y-auto">
+          <form onSubmit={handleSubmit} className="space-y-4 max-h-96 overflow-y-auto px-1">
             {/* Required Fields */}
             <div className="space-y-2">
               <Label htmlFor="name" className="flex items-center gap-2">

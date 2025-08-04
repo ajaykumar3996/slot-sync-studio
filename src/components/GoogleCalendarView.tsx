@@ -90,37 +90,40 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
   const getEventPosition = (event: CalendarEvent) => {
     const startMinutes = event.startHour * 60 + event.startMinute;
     const endMinutes = event.endHour * 60 + event.endMinute;
-    const startTime = 8 * 60; // 8 AM in minutes
-    const pixelsPerHour = 64; // 64px per hour (h-16 = 64px)
-    const totalHours = 11; // 8 AM to 7 PM (11 hours total)
+    const gridStartTime = 8 * 60; // 8 AM in minutes
     
-    const topPixels = ((startMinutes - startTime) / 60) * pixelsPerHour;
-    const heightPixels = ((endMinutes - startMinutes) / 60) * pixelsPerHour;
+    // Each hour is 64px (h-16), so each minute is 64/60 = 1.067px
+    const pixelsPerMinute = 64 / 60;
+    
+    const topPixels = (startMinutes - gridStartTime) * pixelsPerMinute;
+    const heightPixels = (endMinutes - startMinutes) * pixelsPerMinute;
     
     return { 
       top: `${topPixels}px`, 
-      height: `${heightPixels}px`,
-      zIndex: 10
+      height: `${Math.max(heightPixels, 24)}px`, // Minimum 24px height
+      zIndex: 20
     };
   };
 
-  const handleSlotClick = (hour: number, minute: number, duration: 30 | 60) => {
-    // Check if the slot is available
+  const isSlotAvailable = (hour: number, minute: number, duration: 30 | 60) => {
     const slotStart = hour * 60 + minute;
     const slotEnd = slotStart + duration;
     
-    const isBlocked = events.some(event => {
+    return !events.some(event => {
       const eventStart = event.startHour * 60 + event.startMinute;
       const eventEnd = event.endHour * 60 + event.endMinute;
       return slotStart < eventEnd && slotEnd > eventStart;
     });
+  };
 
-    if (isBlocked) {
+  const handleSlotClick = (hour: number, minute: number, duration: 30 | 60) => {
+    if (!isSlotAvailable(hour, minute, duration)) {
       toast({ title: "Slot Unavailable", description: "This time slot conflicts with an existing event", variant: "destructive" });
       return;
     }
 
     const startTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const slotStart = hour * 60 + minute;
     const endHour = Math.floor((slotStart + duration) / 60);
     const endMinute = (slotStart + duration) % 60;
     const endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
@@ -160,80 +163,89 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           {/* Time Grid */}
           <div className="border border-border rounded-lg overflow-hidden bg-background">
             {hours.map((hour, index) => (
-              <div key={hour} className="relative border-b border-border last:border-b-0">
+              <div key={hour} className="relative border-b border-border last:border-b-0 h-16">
                 {/* Hour Label */}
-                <div className="absolute left-0 top-0 w-16 h-16 flex items-start justify-center pt-1 text-xs text-muted-foreground bg-muted/50 border-r border-border z-20">
+                <div className="absolute left-0 top-0 w-16 h-full flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30">
                   {convertTo12Hour(hour)}
                 </div>
                 
-                {/* Time Slots */}
-                <div className="ml-16 relative h-16">
-                  {/* 30-minute slot indicators - always visible */}
-                  <div className="absolute top-0 left-0 right-0 h-8 border-b border-dashed border-border/40"></div>
-                  <div className="absolute bottom-0 left-0 right-0 h-8"></div>
+                {/* Time Slots with permanent booking buttons */}
+                <div className="ml-16 relative h-full">
+                  {/* 30-minute divider line */}
+                  <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/50 z-5"></div>
                   
-                  {/* Clickable 30-minute slots */}
-                  <div 
-                    className="absolute top-0 left-0 right-0 h-8 hover:bg-accent/20 cursor-pointer group transition-colors z-10"
-                    onClick={() => handleSlotClick(hour, 0, 30)}
-                  >
-                    <div className="flex items-center justify-center h-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Badge variant="secondary" className="text-xs px-2 py-1">
-                        <Plus className="w-3 h-3 mr-1" />
-                        30min
-                      </Badge>
-                    </div>
-                  </div>
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 h-8 hover:bg-accent/20 cursor-pointer group transition-colors z-10"
-                    onClick={() => handleSlotClick(hour, 30, 30)}
-                  >
-                    <div className="flex items-center justify-center h-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Badge variant="secondary" className="text-xs px-2 py-1">
-                        <Plus className="w-3 h-3 mr-1" />
-                        30min
-                      </Badge>
-                    </div>
+                  {/* First 30-minute slot */}
+                  <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center z-10">
+                    {isSlotAvailable(hour, 0, 30) ? (
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="text-xs h-6 px-2 bg-accent/50 hover:bg-accent border border-border/50"
+                        onClick={() => handleSlotClick(hour, 0, 30)}
+                      >
+                        Book 30m
+                      </Button>
+                    ) : (
+                      <div className="text-xs text-muted-foreground/50">Busy</div>
+                    )}
                   </div>
                   
-                  {/* 1-hour slot overlay */}
-                  <div 
-                    className="absolute inset-0 hover:bg-primary/10 cursor-pointer group transition-colors z-5"
-                    onClick={() => handleSlotClick(hour, 0, 60)}
-                  >
-                    <div className="flex items-center justify-center h-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Badge variant="outline" className="text-xs px-3 py-1 bg-background">
-                        <Plus className="w-3 h-3 mr-1" />
-                        1 hour
-                      </Badge>
-                    </div>
+                  {/* Second 30-minute slot */}
+                  <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
+                    {isSlotAvailable(hour, 30, 30) ? (
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="text-xs h-6 px-2 bg-accent/50 hover:bg-accent border border-border/50"
+                        onClick={() => handleSlotClick(hour, 30, 30)}
+                      >
+                        Book 30m
+                      </Button>
+                    ) : (
+                      <div className="text-xs text-muted-foreground/50">Busy</div>
+                    )}
                   </div>
+                  
+                  {/* 1-hour slot button (centered) */}
+                  {isSlotAvailable(hour, 0, 60) && (
+                    <div className="absolute inset-0 flex items-center justify-end pr-2 z-15">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="text-xs h-8 px-3 bg-primary/10 hover:bg-primary/20 border-primary/30"
+                        onClick={() => handleSlotClick(hour, 0, 60)}
+                      >
+                        Book 1hr
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
           
           {/* Events Overlay */}
-          <div className="absolute inset-0 ml-16 pointer-events-none">
+          <div className="absolute top-0 left-16 right-0 pointer-events-none">
             {events.map((event) => {
               const position = getEventPosition(event);
               return (
                 <div
                   key={event.id}
-                  className="absolute left-1 right-1 bg-destructive text-destructive-foreground rounded-md px-2 py-1 text-xs font-medium shadow-md border border-destructive/20 pointer-events-auto"
+                  className="absolute left-1 right-1 bg-destructive text-destructive-foreground rounded-md px-2 py-1 text-xs font-medium shadow-lg border border-destructive/20 pointer-events-auto"
                   style={{
                     top: position.top,
                     height: position.height,
-                    minHeight: '24px',
                     zIndex: position.zIndex
                   }}
                 >
-                  <div className="truncate font-semibold">{event.title}</div>
-                  <div className="text-xs opacity-90 truncate">
-                    {event.startTime} - {event.endTime}
-                  </div>
-                  <div className="absolute top-1 right-1">
-                    <Badge variant="outline" className="text-xs px-1 py-0 h-4 bg-destructive-foreground text-destructive">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate font-semibold">{event.title}</div>
+                      <div className="text-xs opacity-90 truncate">
+                        {event.startTime} - {event.endTime}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs px-1 py-0 h-4 bg-destructive-foreground text-destructive ml-1 flex-shrink-0">
                       Busy
                     </Badge>
                   </div>
@@ -247,19 +259,19 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-destructive rounded"></div>
-              <span>Busy slots</span>
+              <span>Busy events</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 border-2 border-dashed border-border rounded"></div>
+              <div className="w-3 h-2 bg-accent/50 border border-border/50 rounded"></div>
               <span>30-min slots</span>
             </div>
             <div className="flex items-center gap-2">
-              <Plus className="w-3 h-3" />
-              <span>Hover to book</span>
+              <div className="w-4 h-2 bg-primary/10 border border-primary/30 rounded"></div>
+              <span>1-hour slots</span>
             </div>
           </div>
           <div className="text-xs text-muted-foreground">
-            Hover over empty time slots to book appointments. Dashed lines show 30-minute boundaries.
+            Click on the available time slot buttons to book appointments. 30-minute slots are always visible, 1-hour slots appear on the right when the full hour is available.
           </div>
         </div>
       </CardContent>

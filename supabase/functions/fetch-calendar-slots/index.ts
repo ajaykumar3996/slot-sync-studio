@@ -47,10 +47,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { startDate, endDate } = await req.json();
-    console.log('⏳ Fetching calendar slots for date range:', { 
+    const { startDate, endDate, fetchEvents } = await req.json();
+    console.log('⏳ Fetching calendar data for date range:', { 
       startDate, 
       endDate,
+      fetchEvents,
       startCST: new Date(startDate).toLocaleString('en-US', { timeZone: CST_TIMEZONE }),
       endCST: new Date(endDate).toLocaleString('en-US', { timeZone: CST_TIMEZONE })
     });
@@ -85,6 +86,36 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.log(`  Duration: ${(eventEnd.getTime() - eventStart.getTime()) / 60000} minutes`);
       console.log(`  All-day: ${!event.start.dateTime ? 'Yes' : 'No'}`);
     });
+
+    // If fetchEvents is true, return the events for calendar view
+    if (fetchEvents) {
+      console.log('📅 Preparing events for calendar view...');
+      const dayEvents = events.map(event => {
+        const startTime = new Date(event.start.dateTime || event.start.date);
+        const endTime = new Date(event.end.dateTime || event.end.date);
+        
+        // Convert to CST for display
+        const startCST = new Date(startTime.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+        const endCST = new Date(endTime.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+        
+        return {
+          id: event.id,
+          title: event.summary || 'Busy',
+          startTime: format(startCST, 'HH:mm'),
+          endTime: format(endCST, 'HH:mm'),
+          startHour: startCST.getHours(),
+          startMinute: startCST.getMinutes(),
+          endHour: endCST.getHours(),
+          endMinute: endCST.getMinutes()
+        };
+      });
+
+      console.log(`✅ Returning ${dayEvents.length} events for calendar view`);
+      return new Response(
+        JSON.stringify({ events: dayEvents }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Generate available slots
     console.log('🔄 Generating available slots...');

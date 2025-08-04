@@ -79,23 +79,6 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
         console.log(`Sending ${isApproved ? 'approval' : 'rejection'} email to ${bookingRequest.user_email} using Resend`);
         
-        // Chrome Remote Desktop instructions for approved bookings
-        const chromeRemoteDesktopInstructions = isApproved ? `
-          <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px; color: #856404; margin: 20px 0;">
-            <h3 style="margin-top: 0; color: #856404;">For Interviews (Please use windows laptop, faced multiple connection issues with mac earlier)</h3>
-            <p><strong>Instructions:</strong></p>
-            <p>Download chrome Remote Desktop application on your laptop and -</p>
-            <ol style="margin-left: 20px;">
-              <li>Create a dummy Gmail account<br>(I ask this because i will be logging into the chrome remote desktop using these credentials, if you are okay sharing your personal email id and credentials, you can skip this)</li>
-              <li>Login to chrome Remote Desktop using these credentials</li>
-              <li>Select "Remote Access" on the left and click "Turn on" for Set up remote access.</li>
-              <li>Set up a six digit custom pin, click "Start"</li>
-            </ol>
-            <p><strong>Please share these credentials and the six digit pin with me.</strong></p>
-            <p>I will send you the otter link before the interview starts.</p>
-          </div>
-        ` : '';
-        
         // Create email content with calendar link for approved bookings
         const calendarSection = isApproved ? `
           <div style="background: #dcfce7; border: 1px solid #22c55e; padding: 15px; border-radius: 6px; color: #15803d; margin: 20px 0;">
@@ -128,11 +111,21 @@ const serve_handler = async (req: Request): Promise<Response> => {
               <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
               <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
               <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
+              <h3 style="margin-top: 0; color: #856404;">For Interviews (Please use windows laptop, faced multiple connection issues with mac earlier)</h3>
+            <p><strong>Instructions:</strong></p>
+            <p>Download chrome Remote Desktop application on your laptop and -</p>
+            <ol style="margin-left: 20px;">
+              <li>Create a dummy Gmail account<br>(I ask this because i will be logging into the chrome remote desktop using these credentials, if you are okay sharing your personal email id and credentials, you can skip this)</li>
+              <li>Login to chrome Remote Desktop using these credentials</li>
+              <li>Select "Remote Access" on the left and click "Turn on" for Set up remote access.</li>
+              <li>Set up a six digit custom pin, click "Start"</li>
+            </ol>
+            <p><strong>Please share these credentials and the six digit pin with me.</strong></p>
+            <p>I will send you the otter link before the interview starts.</p>
             </div>
             
             ${calendarSection}
             
-            ${chromeRemoteDesktopInstructions}
             
             <p style="margin-top: 20px;">
               Best Regards,<br>

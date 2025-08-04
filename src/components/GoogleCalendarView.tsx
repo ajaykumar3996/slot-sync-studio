@@ -218,7 +218,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* 1-hour slot button (positioned to avoid overlap) */}
                   {!isWeekend && isSlotAvailable(hour, 0, 60) && (
-                    <div className="absolute left-1/4 right-1/4 top-1/2 transform -translate-y-1/2 flex items-center justify-center z-20 pointer-events-none">
+                    <div className="absolute left-1/4 right-1/4 top-1/2 transform -translate-y-1/2 flex items-center justify-right z-20 pointer-events-none">
                       <Button 
                         size="sm" 
                         variant="outline" 

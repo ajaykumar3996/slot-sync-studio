@@ -17,14 +17,21 @@ export type Database = {
       booking_requests: {
         Row: {
           approval_token: string | null
+          client_name: string
           created_at: string
           id: string
+          job_description: string
+          job_link: string | null
           message: string | null
+          phone_number: string
+          resume_file_path: string | null
+          role_name: string
           slot_date: string
           slot_duration_minutes: number
           slot_end_time: string
           slot_start_time: string
           status: string
+          team_details: string | null
           timezone: string
           updated_at: string
           user_email: string
@@ -32,14 +39,21 @@ export type Database = {
         }
         Insert: {
           approval_token?: string | null
+          client_name?: string
           created_at?: string
           id?: string
+          job_description?: string
+          job_link?: string | null
           message?: string | null
+          phone_number?: string
+          resume_file_path?: string | null
+          role_name?: string
           slot_date: string
           slot_duration_minutes: number
           slot_end_time: string
           slot_start_time: string
           status?: string
+          team_details?: string | null
           timezone?: string
           updated_at?: string
           user_email: string
@@ -47,14 +61,21 @@ export type Database = {
         }
         Update: {
           approval_token?: string | null
+          client_name?: string
           created_at?: string
           id?: string
+          job_description?: string
+          job_link?: string | null
           message?: string | null
+          phone_number?: string
+          resume_file_path?: string | null
+          role_name?: string
           slot_date?: string
           slot_duration_minutes?: number
           slot_end_time?: string
           slot_start_time?: string
           status?: string
+          team_details?: string | null
           timezone?: string
           updated_at?: string
           user_email?: string

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, User, Mail, MessageSquare } from "lucide-react";
+import { Calendar, Clock, User, Mail, MessageSquare, Phone, Building, Briefcase, FileText, Users, Link } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -27,18 +27,28 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    phoneNumber: "",
+    clientName: "",
+    roleName: "",
+    jobDescription: "",
+    teamDetails: "",
+    jobLink: "",
     message: ""
   });
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!slot || !formData.name.trim() || !formData.email.trim()) {
+    // Validate required fields
+    if (!slot || !formData.name.trim() || !formData.email.trim() || 
+        !formData.phoneNumber.trim() || !formData.clientName.trim() || 
+        !formData.roleName.trim() || !formData.jobDescription.trim() || !resumeFile) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields.",
+        description: "Please fill in all required fields and upload your resume.",
         variant: "destructive",
       });
       return;
@@ -47,11 +57,37 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
     setIsSubmitting(true);
 
     try {
+      let resumeFilePath = null;
+      
+      // Upload resume file if provided
+      if (resumeFile) {
+        const fileExt = resumeFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('resumes')
+          .upload(fileName, resumeFile);
+
+        if (uploadError) {
+          console.error('Resume upload error:', uploadError);
+          throw new Error('Failed to upload resume');
+        }
+        
+        resumeFilePath = uploadData.path;
+      }
+
       // Submit booking request via Supabase edge function
       const { data, error } = await supabase.functions.invoke('submit-booking-request', {
         body: {
           user_name: formData.name.trim(),
           user_email: formData.email.trim(),
+          phone_number: formData.phoneNumber.trim(),
+          client_name: formData.clientName.trim(),
+          role_name: formData.roleName.trim(),
+          job_description: formData.jobDescription.trim(),
+          resume_file_path: resumeFilePath,
+          team_details: formData.teamDetails.trim() || null,
+          job_link: formData.jobLink.trim() || null,
           message: formData.message.trim() || null,
           slot_date: slot.date.getFullYear() + '-' + String(slot.date.getMonth() + 1).padStart(2, '0') + '-' + String(slot.date.getDate()).padStart(2, '0'),
           slot_start_time: slot.startTime,
@@ -70,7 +106,18 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
         description: data.message || "Your booking request has been sent. You'll receive a confirmation email once approved.",
       });
 
-      setFormData({ name: "", email: "", message: "" });
+      setFormData({ 
+        name: "", 
+        email: "", 
+        phoneNumber: "",
+        clientName: "",
+        roleName: "",
+        jobDescription: "",
+        teamDetails: "",
+        jobLink: "",
+        message: "" 
+      });
+      setResumeFile(null);
       onClose();
     } catch (error) {
       console.error('Error submitting booking:', error);
@@ -113,11 +160,12 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 max-h-96 overflow-y-auto">
+            {/* Required Fields */}
             <div className="space-y-2">
               <Label htmlFor="name" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                Full Name
+                Full Name *
               </Label>
               <Input
                 id="name"
@@ -132,7 +180,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
             <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                Email Address
+                Email Address *
               </Label>
               <Input
                 id="email"
@@ -145,9 +193,116 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="phoneNumber" className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Phone Number *
+              </Label>
+              <Input
+                id="phoneNumber"
+                type="tel"
+                value={formData.phoneNumber}
+                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                required
+                placeholder="Enter your phone number"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clientName" className="flex items-center gap-2">
+                <Building className="h-4 w-4" />
+                Client Name *
+              </Label>
+              <Input
+                id="clientName"
+                type="text"
+                value={formData.clientName}
+                onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                required
+                placeholder="Enter the client/company name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="roleName" className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4" />
+                Role Name *
+              </Label>
+              <Input
+                id="roleName"
+                type="text"
+                value={formData.roleName}
+                onChange={(e) => setFormData({ ...formData, roleName: e.target.value })}
+                required
+                placeholder="Enter the role/position name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="jobDescription" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Job Description *
+              </Label>
+              <Textarea
+                id="jobDescription"
+                value={formData.jobDescription}
+                onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
+                required
+                placeholder="Provide a brief job description"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="resume" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Resume *
+              </Label>
+              <Input
+                id="resume"
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
+                required
+                className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+              />
+              {resumeFile && (
+                <p className="text-sm text-muted-foreground">Selected: {resumeFile.name}</p>
+              )}
+            </div>
+
+            {/* Optional Fields */}
+            <div className="space-y-2">
+              <Label htmlFor="teamDetails" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Team Details (Optional)
+              </Label>
+              <Input
+                id="teamDetails"
+                type="text"
+                value={formData.teamDetails}
+                onChange={(e) => setFormData({ ...formData, teamDetails: e.target.value })}
+                placeholder="Which team are you interviewing for?"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="jobLink" className="flex items-center gap-2">
+                <Link className="h-4 w-4" />
+                Job Link (Optional)
+              </Label>
+              <Input
+                id="jobLink"
+                type="url"
+                value={formData.jobLink}
+                onChange={(e) => setFormData({ ...formData, jobLink: e.target.value })}
+                placeholder="Link to the job posting you applied for"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="message" className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
-                Message (Optional)
+                Additional Message (Optional)
               </Label>
               <Textarea
                 id="message"

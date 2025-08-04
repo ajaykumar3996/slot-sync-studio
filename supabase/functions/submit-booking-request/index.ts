@@ -10,6 +10,13 @@ const corsHeaders = {
 interface BookingRequest {
   user_name: string;
   user_email: string;
+  phone_number: string;
+  client_name: string;
+  role_name: string;
+  job_description: string;
+  resume_file_path?: string;
+  team_details?: string;
+  job_link?: string;
   message?: string;
   slot_date: string;
   slot_start_time: string;
@@ -68,20 +75,37 @@ const serve_handler = async (req: Request): Promise<Response> => {
     const approvalUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
     const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
+    const resumeDownloadUrl = bookingData.resume_file_path 
+      ? `${supabaseUrl}/storage/v1/object/resumes/${bookingData.resume_file_path}`
+      : null;
+
     const emailResponse = await resend.emails.send({
       from: "BookMySlot <anand@bookmyslot.me>",
       to: ["itmate.ai@gmail.com"],
-      subject: `New Booking Request - ${bookingData.slot_date} ${bookingData.slot_start_time}`,
+      subject: `New Booking Request - ${bookingData.role_name} at ${bookingData.client_name}`,
       html: `
         <h2>New Booking Request</h2>
         <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3>Booking Details</h3>
+          <h3>Personal Information</h3>
           <p><strong>Name:</strong> ${bookingData.user_name}</p>
           <p><strong>Email:</strong> ${bookingData.user_email}</p>
+          <p><strong>Phone:</strong> ${bookingData.phone_number}</p>
+          
+          <h3>Job Information</h3>
+          <p><strong>Client/Company:</strong> ${bookingData.client_name}</p>
+          <p><strong>Role:</strong> ${bookingData.role_name}</p>
+          <p><strong>Job Description:</strong> ${bookingData.job_description}</p>
+          ${bookingData.team_details ? `<p><strong>Team:</strong> ${bookingData.team_details}</p>` : ''}
+          ${bookingData.job_link ? `<p><strong>Job Link:</strong> <a href="${bookingData.job_link}" target="_blank">${bookingData.job_link}</a></p>` : ''}
+          
+          <h3>Interview Details</h3>
           <p><strong>Date:</strong> ${bookingData.slot_date}</p>
           <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
           <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
-          ${bookingData.message ? `<p><strong>Message:</strong> ${bookingData.message}</p>` : ''}
+          
+          ${resumeDownloadUrl ? `<h3>Resume</h3><p><a href="${resumeDownloadUrl}" target="_blank" style="background: #3b82f6; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px;">📄 Download Resume</a></p>` : ''}
+          
+          ${bookingData.message ? `<h3>Additional Message</h3><p>${bookingData.message}</p>` : ''}
         </div>
         
         <div style="margin: 20px 0;">

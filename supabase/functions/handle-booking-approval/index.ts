@@ -135,8 +135,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
           subject,
           html: `
             <h2>Meeting Request ${isApproved ? 'Confirmed' : 'Declined'}</h2>
-            ${interviewInstructions}
             ${calendarSection}
+            ${interviewInstructions}
             <p style="margin-top: 20px;">
               Best Regards,<br>
               Anand

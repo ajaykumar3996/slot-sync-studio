@@ -290,7 +290,7 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
   console.log('🕐 Converted times:', { startDateTime, endDateTime });
   
   const calendarEvent = {
-    summary: `Meeting with ${bookingRequest.user_name}`,
+    summary: bookingRequest.user_name,
     description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
     start: {
       dateTime: startDateTime,

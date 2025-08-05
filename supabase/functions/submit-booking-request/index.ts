@@ -77,32 +77,67 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     // Prepare resume attachment if available
     let resumeAttachment = null;
+    let resumeStatus = 'No resume uploaded';
+    
     if (bookingData.resume_file_path) {
+      console.log('Processing resume attachment for path:', bookingData.resume_file_path);
       try {
         // Download the resume file from storage
         const { data: resumeData, error: resumeError } = await supabase.storage
           .from('resumes')
           .download(bookingData.resume_file_path);
         
-        if (!resumeError && resumeData) {
+        if (resumeError) {
+          console.error('Storage download error:', resumeError);
+          resumeStatus = `Resume upload failed: ${resumeError.message}`;
+        } else if (resumeData) {
+          console.log('Resume data downloaded successfully, size:', resumeData.size, 'type:', resumeData.type);
+          
           // Convert file to base64 for email attachment
           const resumeArrayBuffer = await resumeData.arrayBuffer();
-          const resumeBase64 = btoa(String.fromCharCode(...new Uint8Array(resumeArrayBuffer)));
+          console.log('Resume array buffer size:', resumeArrayBuffer.byteLength);
+          
+          // Use a more efficient base64 conversion for large files
+          const uint8Array = new Uint8Array(resumeArrayBuffer);
+          let binaryString = '';
+          const chunkSize = 1024 * 64; // 64KB chunks
+          
+          for (let i = 0; i < uint8Array.length; i += chunkSize) {
+            const chunk = uint8Array.slice(i, i + chunkSize);
+            binaryString += String.fromCharCode(...chunk);
+          }
+          
+          const resumeBase64 = btoa(binaryString);
+          console.log('Base64 conversion completed, length:', resumeBase64.length);
           
           // Get original filename from path
           const originalFilename = bookingData.resume_file_path.split('/').pop() || 'resume.pdf';
+          const fileExtension = originalFilename.split('.').pop()?.toLowerCase();
+          
+          // Determine MIME type
+          let mimeType = 'application/pdf';
+          if (fileExtension === 'docx') {
+            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          } else if (fileExtension === 'doc') {
+            mimeType = 'application/msword';
+          }
           
           resumeAttachment = {
-            filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${originalFilename.split('.').pop()}`,
+            filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${fileExtension}`,
             content: resumeBase64,
-            type: resumeData.type || 'application/pdf',
+            type: mimeType,
             disposition: 'attachment'
           };
+          
+          resumeStatus = `Resume attached: ${originalFilename}`;
+          console.log('Resume attachment prepared successfully');
         } else {
-          console.error('Failed to download resume:', resumeError);
+          console.error('No resume data returned from storage');
+          resumeStatus = 'Resume download failed: No data returned';
         }
       } catch (error) {
         console.error('Error processing resume attachment:', error);
+        resumeStatus = `Resume processing failed: ${error.message}`;
       }
     }
 
@@ -130,7 +165,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
           <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
           <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
           
-          ${resumeAttachment ? `<h3>Resume</h3><p>📄 Resume is attached to this email</p>` : '<p><em>⚠️ No resume was uploaded</em></p>'}
+          <h3>Resume Status</h3>
+          <p>${resumeAttachment ? '📄 Resume is attached to this email' : `⚠️ ${resumeStatus}`}</p>
           
           ${bookingData.message ? `<h3>Additional Message</h3><p>${bookingData.message}</p>` : ''}
         </div>

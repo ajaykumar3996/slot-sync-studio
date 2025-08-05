@@ -260,11 +260,36 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
               <Input
                 id="resume"
                 type="file"
-                accept=".pdf,.doc,.docx"
-                onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
+                accept=".pdf,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const fileExt = file.name.split('.').pop()?.toLowerCase();
+                    if (fileExt !== 'pdf' && fileExt !== 'docx') {
+                      toast({
+                        title: "Invalid File Type",
+                        description: "Please upload only PDF or DOCX files.",
+                        variant: "destructive",
+                      });
+                      e.target.value = '';
+                      return;
+                    }
+                    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                      toast({
+                        title: "File Too Large",
+                        description: "Please upload a file smaller than 10MB.",
+                        variant: "destructive",
+                      });
+                      e.target.value = '';
+                      return;
+                    }
+                  }
+                  setResumeFile(file || null);
+                }}
                 required
                 className="h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
               />
+              <p className="text-xs text-muted-foreground">Only PDF and DOCX files up to 10MB</p>
               {resumeFile && (
                 <p className="text-sm text-muted-foreground">Selected: {resumeFile.name}</p>
               )}

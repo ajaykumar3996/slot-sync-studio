@@ -24,9 +24,93 @@ interface BookingRequest {
   slot_duration_minutes: number;
 }
 
-// Fetch brief company information (4-5 sentences) using public APIs
-const fetchClientInfo = async (clientName: string): Promise<string> => {
-  // Try Wikipedia summary first
+// Fetch brief company information (4-5 sentences) using free sources with fuzzy correction
+const fetchClientInfo = async (clientName: string, jobLink?: string | null): Promise<string> => {
+  // Helpers
+  const normalize = (s: string) => s
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(inc|ltd|plc|corp|corporation|company|co|llc|limited)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const levenshtein = (a: string, b: string) => {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + cost,
+        );
+      }
+    }
+    return dp[m][n];
+  };
+
+  const similarity = (a: string, b: string) => {
+    const maxLen = Math.max(a.length, b.length) || 1;
+    return 1 - (levenshtein(a, b) / maxLen);
+  };
+
+  const getDomainCore = (urlStr?: string | null) => {
+    try {
+      if (!urlStr) return null;
+      const u = new URL(urlStr);
+      const host = u.hostname.replace(/^www\./, '');
+      const parts = host.split('.');
+      if (parts.length >= 2) return parts[parts.length - 2];
+      return parts[0] || null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const domainCore = getDomainCore(jobLink);
+  const normClient = normalize(clientName);
+
+  // Step 1: Wikipedia search with fuzzy matching
+  try {
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(clientName)}&srlimit=10&format=json&utf8=1&srqiprofile=classic_noboostlinks`;
+    const searchResp = await fetch(searchUrl);
+    if (searchResp.ok) {
+      const searchJson = await searchResp.json();
+      const results: Array<{ title: string; snippet?: string }> = searchJson?.query?.search || [];
+      if (results.length) {
+        let best = { title: '', score: -Infinity };
+        for (const r of results) {
+          const nt = normalize(r.title);
+          let score = similarity(nt, normClient);
+          if (domainCore && nt.includes(domainCore)) score += 0.2;
+          if (/(disambiguation)/i.test(r.title)) score -= 0.3;
+          if (score > best.score) best = { title: r.title, score };
+        }
+        if (best.title && best.score > 0.4) {
+          const title = encodeURIComponent(best.title);
+          const wikiResp = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`);
+          if (wikiResp.ok) {
+            const wikiJson = await wikiResp.json();
+            if (wikiJson?.extract) {
+              const sentences = (wikiJson.extract as string)
+                .split(/(?<=\.)\s+/)
+                .slice(0, 5)
+                .join(' ');
+              return sentences;
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.log('Wikipedia search failed:', err);
+  }
+
+  // Step 2: Direct Wikipedia title attempt as fallback
   try {
     const title = encodeURIComponent(clientName.trim());
     const wikiResp = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`);
@@ -41,13 +125,14 @@ const fetchClientInfo = async (clientName: string): Promise<string> => {
       }
     }
   } catch (err) {
-    console.log('Wikipedia lookup failed:', err);
+    console.log('Wikipedia direct lookup failed:', err);
   }
 
-  // Fallback to DuckDuckGo Instant Answer
+  // Step 3: DuckDuckGo Instant Answer as final fallback (free)
   try {
+    const query = domainCore ? `${clientName} ${domainCore}` : clientName;
     const ddgResp = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(clientName)}&format=json&no_html=1&skip_disambig=1`
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
     );
     if (ddgResp.ok) {
       const ddgJson = await ddgResp.json();
@@ -186,7 +271,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     }
 
     // Enrich email with client research and AI templates
-    const clientInfo = await fetchClientInfo(bookingData.client_name);
+    const clientInfo = await fetchClientInfo(bookingData.client_name, bookingData.job_link);
     const resumeLine = resumeFilename ? `Attached - ${resumeFilename}` : 'Not provided';
 
     const templatesHtml = `

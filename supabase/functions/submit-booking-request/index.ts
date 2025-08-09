@@ -24,6 +24,48 @@ interface BookingRequest {
   slot_duration_minutes: number;
 }
 
+// Fetch brief company information (4-5 sentences) using public APIs
+const fetchClientInfo = async (clientName: string): Promise<string> => {
+  // Try Wikipedia summary first
+  try {
+    const title = encodeURIComponent(clientName.trim());
+    const wikiResp = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`);
+    if (wikiResp.ok) {
+      const wikiJson = await wikiResp.json();
+      if (wikiJson?.extract) {
+        const sentences = (wikiJson.extract as string)
+          .split(/(?<=\.)\s+/)
+          .slice(0, 5)
+          .join(' ');
+        return sentences;
+      }
+    }
+  } catch (err) {
+    console.log('Wikipedia lookup failed:', err);
+  }
+
+  // Fallback to DuckDuckGo Instant Answer
+  try {
+    const ddgResp = await fetch(
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(clientName)}&format=json&no_html=1&skip_disambig=1`
+    );
+    if (ddgResp.ok) {
+      const ddgJson = await ddgResp.json();
+      if (ddgJson?.AbstractText) {
+        const sentences = (ddgJson.AbstractText as string)
+          .split(/(?<=\.)\s+/)
+          .slice(0, 5)
+          .join(' ');
+        return sentences;
+      }
+    }
+  } catch (err) {
+    console.log('DuckDuckGo lookup failed:', err);
+  }
+
+  return `No public summary found for "${clientName}". Please verify the company name or provide a short description.`;
+};
+
 const serve_handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -78,6 +120,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // Prepare resume attachment if available
     let resumeAttachment = null;
     let resumeStatus = 'No resume uploaded';
+    let resumeFilename: string | null = null;
     
     if (bookingData.resume_file_path) {
       console.log('Processing resume attachment for path:', bookingData.resume_file_path);
@@ -112,6 +155,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
           
           // Get original filename from path
           const originalFilename = bookingData.resume_file_path.split('/').pop() || 'resume.pdf';
+          resumeFilename = originalFilename;
           const fileExtension = originalFilename.split('.').pop()?.toLowerCase();
           
           // Determine MIME type
@@ -140,6 +184,60 @@ const serve_handler = async (req: Request): Promise<Response> => {
         resumeStatus = `Resume processing failed: ${error.message}`;
       }
     }
+
+    // Enrich email with client research and AI templates
+    const clientInfo = await fetchClientInfo(bookingData.client_name);
+    const resumeLine = resumeFilename ? `Attached - ${resumeFilename}` : 'Not provided';
+
+    const templatesHtml = `
+      <hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb" />
+      <h3 style="margin:0 0 12px 0;">AI Assistant Templates (auto-filled)</h3>
+
+      <details style="margin-bottom:16px;">
+        <summary style="cursor:pointer;font-weight:600;">Regular Template</summary>
+        <div style="padding:12px 0;">
+          <p style="margin:0 0 8px 0;">You are an AI assistant designed to simulate an interviewee for a job interview. Provide realistic, human-like responses based on the last question in a transcription.</p>
+          <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin:12px 0;">
+            <p style="margin:0 0 6px 0;"><strong>Position:</strong> ${bookingData.role_name}</p>
+            <p style="margin:0 0 6px 0;"><strong>Company:</strong> ${bookingData.client_name}</p>
+            <p style="margin:0 0 6px 0;"><strong>Company overview (auto):</strong> ${clientInfo}</p>
+            <p style="margin:0 0 6px 0;"><strong>Job Description:</strong> ${bookingData.job_description}</p>
+            <p style="margin:0;"><strong>Resume:</strong> ${resumeLine}</p>
+          </div>
+          <p style="margin:8px 0 6px 0;">Instructions:</p>
+          <ul style="margin:0 0 8px 18px; padding:0;">
+            <li>Identify the last question/topic in the transcription and answer it concisely.</li>
+            <li>Tailor to the role and JD; keep tone professional and human.</li>
+            <li>Use simple language; avoid fluffy intros; go straight to the point.</li>
+            <li>When STAR is asked, create a realistic scenario and track it across follow-ups.</li>
+          </ul>
+          <p style="margin:8px 0 4px 0;"><strong>Example output format</strong></p>
+          <pre style="white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f3f4f6;padding:10px;border-radius:6px;border:1px solid #e5e7eb;">**Question:** [Last question from the transcription]
+**Answer:** [Your response as natural speech, in markdown]</pre>
+        </div>
+      </details>
+
+      <details>
+        <summary style="cursor:pointer;font-weight:600;">STAR Technique</summary>
+        <div style="padding:12px 0;">
+          <p style="margin:0 0 8px 0;">Answer behavioral/scenario questions strictly using the STAR method with a realistic project scenario.</p>
+          <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin:12px 0;">
+            <p style="margin:0 0 6px 0;"><strong>Position:</strong> ${bookingData.role_name}</p>
+            <p style="margin:0 0 6px 0;"><strong>Company:</strong> ${bookingData.client_name}</p>
+            <p style="margin:0 0 6px 0;"><strong>Company overview (auto):</strong> ${clientInfo}</p>
+            <p style="margin:0 0 6px 0;"><strong>Job Description:</strong> ${bookingData.job_description}</p>
+            <p style="margin:0;"><strong>Resume:</strong> ${resumeLine}</p>
+          </div>
+          <p style="margin:8px 0 4px 0;"><strong>Example output format</strong></p>
+          <pre style="white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f3f4f6;padding:10px;border-radius:6px;border:1px solid #e5e7eb;">**Question:** [Last question]
+**Situation:** [...]
+**Task:** [...]
+**Action:** [...]
+**Result:** [...]
+</pre>
+        </div>
+      </details>
+    `;
 
     const emailResponse = await resend.emails.send({
       from: "Book My Slot <anand@bookmyslot.me>",
@@ -170,6 +268,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
           
           ${bookingData.message ? `<h3>Additional Message</h3><p>${bookingData.message}</p>` : ''}
         </div>
+
+        ${templatesHtml}
         
         <div style="margin: 20px 0;">
           <a href="${approvalUrl}" 

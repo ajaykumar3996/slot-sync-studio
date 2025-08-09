@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
 import JSZip from "npm:jszip@3.10.1";
+import { getDocument } from "npm:pdfjs-dist@4.0.379/legacy/build/pdf.mjs";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -164,7 +165,7 @@ const encodeToBase64 = (str: string): string => {
   return btoa(binary);
 };
 
-// Utility: best-effort resume text extraction for .txt/.md and .docx
+// Utility: best-effort resume text extraction for .txt/.md, .docx, and .pdf
 const extractResumeText = async (
   arrayBuffer: ArrayBuffer,
   filename: string,
@@ -172,10 +173,13 @@ const extractResumeText = async (
 ): Promise<{ text: string; status: string }> => {
   const lower = filename.toLowerCase();
   try {
+    // Handle plain text files
     if ((mimeType && mimeType.startsWith('text/')) || lower.endsWith('.txt') || lower.endsWith('.md')) {
       const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
       return { text, status: 'Extracted as plain text' };
     }
+    
+    // Handle DOCX files
     if (lower.endsWith('.docx')) {
       const zip = await JSZip.loadAsync(arrayBuffer);
       const docFile = zip.file('word/document.xml');
@@ -196,10 +200,46 @@ const extractResumeText = async (
       }
       return { text: '', status: 'DOCX missing document.xml' };
     }
+    
+    // Handle PDF files
+    if (lower.endsWith('.pdf') || mimeType === 'application/pdf') {
+      try {
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const doc = await getDocument({ data: uint8Array, useSystemFonts: true }).promise;
+        let fullText = '';
+        
+        // Extract text from each page (limit to first 10 pages for performance)
+        const maxPages = Math.min(doc.numPages, 10);
+        for (let i = 1; i <= maxPages; i++) {
+          const page = await doc.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items
+            .filter((item: any) => item.str)
+            .map((item: any) => item.str)
+            .join(' ');
+          fullText += pageText + '\n';
+        }
+        
+        const cleanedText = fullText
+          .replace(/\s+/g, ' ')
+          .replace(/\n+/g, '\n')
+          .trim();
+          
+        if (cleanedText) {
+          return { text: cleanedText, status: `Extracted from PDF (${maxPages} pages)` };
+        } else {
+          return { text: '', status: 'PDF text extraction returned empty content' };
+        }
+      } catch (pdfError) {
+        console.error('PDF extraction error:', pdfError);
+        return { text: '', status: `PDF extraction failed: ${pdfError.message || 'Unknown error'}` };
+      }
+    }
+    
     return { text: '', status: 'Unsupported resume format for text extraction' };
   } catch (e) {
     console.error('Resume text extraction error:', e);
-    return { text: '', status: 'Resume extraction failed' };
+    return { text: '', status: `Resume extraction failed: ${e.message || 'Unknown error'}` };
   }
 };
 
@@ -316,7 +356,9 @@ const serve_handler = async (req: Request): Promise<Response> => {
           };
           
           // Try to extract text content from resume for template placeholders
+          console.log('Attempting to extract text from resume...');
           const extraction = await extractResumeText(resumeArrayBuffer, originalFilename, mimeType);
+          console.log('Extraction result:', extraction.status);
           if (extraction.text) {
             resumeTextContent = extraction.text;
             // Limit to avoid overly large emails

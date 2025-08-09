@@ -8,6 +8,11 @@ const corsHeaders = {
 };
 
 const serve_handler = async (req: Request): Promise<Response> => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
     const url = new URL(req.url);
     const token = url.searchParams.get('token');
@@ -156,110 +161,109 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.error('Email credentials not found in environment variables');
     }
 
-    // Return success page
+    // Return success page with proper HTML structure
     const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .container {
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
-      padding: 40px;
-      max-width: 500px;
-      width: 100%;
-      text-align: center;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    }
-    .icon {
-      font-size: 64px;
-      margin-bottom: 20px;
-      display: block;
-    }
-    .success-icon { color: #22c55e; }
-    .error-icon { color: #ef4444; }
-    h1 {
-      color: #1f2937;
-      margin-bottom: 16px;
-      font-size: 28px;
-      font-weight: 600;
-    }
-    p {
-      color: #6b7280;
-      line-height: 1.6;
-      margin-bottom: 12px;
-      font-size: 16px;
-    }
-    .close-note {
-      margin-top: 30px;
-      font-size: 14px;
-      opacity: 0.7;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            display: block;
+        }
+        .success-icon { color: #22c55e; }
+        .error-icon { color: #ef4444; }
+        h1 {
+            color: #1f2937;
+            margin-bottom: 16px;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        p {
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .close-note {
+            margin-top: 30px;
+            font-size: 14px;
+            opacity: 0.7;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <span class="icon ${action === 'approve' ? 'success-icon' : 'error-icon'}">
-      ${action === 'approve' ? '✅' : '❌'}
-    </span>
-    <h1>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</h1>
-    <p>The booking request for <strong>${bookingRequest.user_name}</strong> on <strong>${bookingRequest.slot_date} ${bookingRequest.slot_start_time}</strong> has been ${newStatus}.</p>
-    <p>A confirmation email has been sent to <strong>${bookingRequest.user_email}</strong>.</p>
-    <p class="close-note">You can safely close this tab.</p>
-  </div>
+    <div class="container">
+        <span class="icon ${action === 'approve' ? 'success-icon' : 'error-icon'}">
+            ${action === 'approve' ? '✅' : '❌'}
+        </span>
+        <h1>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</h1>
+        <p>The booking request for <strong>${bookingRequest.user_name}</strong> on <strong>${bookingRequest.slot_date} ${bookingRequest.slot_start_time}</strong> has been ${newStatus}.</p>
+        <p>A confirmation email has been sent to <strong>${bookingRequest.user_email}</strong>.</p>
+        <p class="close-note">You can safely close this tab.</p>
+    </div>
 </body>
 </html>`;
 
     return new Response(htmlContent, { 
       status: 200,
       headers: { 
-        'Content-Type': 'text/html; charset=UTF-8',
+        'Content-Type': 'text/html',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
-        'Expires': '0',
-        ...corsHeaders
+        'Expires': '0'
       }
     });
 
   } catch (error) {
     console.error('Error in handle-booking-approval function:', error);
-    return new Response(
-      `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Error</title>
-          <style>
-            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-            .error { background: #fef2f2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; }
-          </style>
-        </head>
-        <body>
-          <div class="error">
-            <h2>Error</h2>
-            <p>An error occurred while processing the booking approval: ${error.message}</p>
-          </div>
-        </body>
-      </html>
-      `,
-      {
-        status: 500,
-        headers: { 'Content-Type': 'text/html' },
-      }
-    );
+    
+    const errorHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        .error { background: #fef2f2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="error">
+        <h2>Error</h2>
+        <p>An error occurred while processing the booking approval: ${error.message}</p>
+    </div>
+</body>
+</html>`;
+
+    return new Response(errorHtml, {
+      status: 500,
+      headers: { 'Content-Type': 'text/html' },
+    });
   }
 };
 

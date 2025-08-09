@@ -231,7 +231,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     return new Response(htmlContent, { 
       status: 200,
       headers: { 
-        'Content-Type': 'text/html',
+        'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0'

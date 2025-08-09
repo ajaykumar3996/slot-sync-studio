@@ -26,146 +26,35 @@ interface BookingRequest {
   slot_duration_minutes: number;
 }
 
-// Fetch brief company information (4-5 sentences) using free sources with fuzzy correction
 const fetchClientInfo = async (clientName: string, jobLink?: string | null): Promise<string> => {
-  // Helpers
-  const normalize = (s: string) => s
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\b(inc|ltd|plc|corp|corporation|company|co|llc|limited)\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const levenshtein = (a: string, b: string) => {
-    const m = a.length, n = b.length;
-    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        dp[i][j] = Math.min(
-          dp[i - 1][j] + 1,
-          dp[i][j - 1] + 1,
-          dp[i - 1][j - 1] + cost,
-        );
-      }
-    }
-    return dp[m][n];
-  };
-
-  const similarity = (a: string, b: string) => {
-    const maxLen = Math.max(a.length, b.length) || 1;
-    return 1 - (levenshtein(a, b) / maxLen);
-  };
-
-  const getDomainCore = (urlStr?: string | null) => {
-    try {
-      if (!urlStr) return null;
-      const u = new URL(urlStr);
-      const host = u.hostname.replace(/^www\./, '');
-      const parts = host.split('.');
-      if (parts.length >= 2) return parts[parts.length - 2];
-      return parts[0] || null;
-    } catch (_) {
-      return null;
-    }
-  };
-
-  const domainCore = getDomainCore(jobLink);
-  const normClient = normalize(clientName);
-
-  // Step 1: Wikipedia search with fuzzy matching
   try {
-    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(clientName)}&srlimit=10&format=json&utf8=1&srqiprofile=classic_noboostlinks`;
-    const searchResp = await fetch(searchUrl);
-    if (searchResp.ok) {
-      const searchJson = await searchResp.json();
-      const results: Array<{ title: string; snippet?: string }> = searchJson?.query?.search || [];
-      if (results.length) {
-        let best = { title: '', score: -Infinity };
-        for (const r of results) {
-          const nt = normalize(r.title);
-          let score = similarity(nt, normClient);
-          if (domainCore && nt.includes(domainCore)) score += 0.2;
-          if (/(disambiguation)/i.test(r.title)) score -= 0.3;
-          if (score > best.score) best = { title: r.title, score };
-        }
-        if (best.title && best.score > 0.4) {
-          const title = encodeURIComponent(best.title);
-          const wikiResp = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`);
-          if (wikiResp.ok) {
-            const wikiJson = await wikiResp.json();
-            if (wikiJson?.extract) {
-              const sentences = (wikiJson.extract as string)
-                .split(/(?<=\.)\s+/)
-                .slice(0, 5)
-                .join(' ');
-              return sentences;
-            }
-          }
-        }
-      }
+    const searchTerm = clientName.toLowerCase().trim();
+    
+    const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(searchTerm + ' company')}&format=json&no_html=1&skip_disambig=1`);
+    const data = await response.json();
+    
+    if (data.Abstract && data.Abstract.length > 0) {
+      return data.Abstract.substring(0, 500) + (data.Abstract.length > 500 ? '...' : '');
     }
-  } catch (err) {
-    console.log('Wikipedia search failed:', err);
+    
+    return `${clientName} is a company. Additional information about this organization may be available through their website or professional profiles.`;
+  } catch (error) {
+    console.error('Error fetching client info:', error);
+    return `${clientName} is a company.`;
   }
-
-  // Step 2: Direct Wikipedia title attempt as fallback
-  try {
-    const title = encodeURIComponent(clientName.trim());
-    const wikiResp = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`);
-    if (wikiResp.ok) {
-      const wikiJson = await wikiResp.json();
-      if (wikiJson?.extract) {
-        const sentences = (wikiJson.extract as string)
-          .split(/(?<=\.)\s+/)
-          .slice(0, 5)
-          .join(' ');
-        return sentences;
-      }
-    }
-  } catch (err) {
-    console.log('Wikipedia direct lookup failed:', err);
-  }
-
-  // Step 3: DuckDuckGo Instant Answer as final fallback (free)
-  try {
-    const query = domainCore ? `${clientName} ${domainCore}` : clientName;
-    const ddgResp = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
-    );
-    if (ddgResp.ok) {
-      const ddgJson = await ddgResp.json();
-      if (ddgJson?.AbstractText) {
-        const sentences = (ddgJson.AbstractText as string)
-          .split(/(?<=\.)\s+/)
-          .slice(0, 5)
-          .join(' ');
-        return sentences;
-      }
-    }
-  } catch (err) {
-    console.log('DuckDuckGo lookup failed:', err);
-  }
-
-  return `No public summary found for "${clientName}". Please verify the company name or provide a short description.`;
 };
 
-// Utility: encode string to base64
 const encodeToBase64 = (str: string): string => {
-  const bytes = new TextEncoder().encode(str);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
   let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
+  const len = data.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(data[i]);
   }
   return btoa(binary);
 };
 
-// Utility: best-effort resume text extraction for .txt/.md, .docx, and .pdf
 const extractResumeText = async (
   arrayBuffer: ArrayBuffer,
   filename: string,
@@ -173,42 +62,33 @@ const extractResumeText = async (
 ): Promise<{ text: string; status: string }> => {
   const lower = filename.toLowerCase();
   try {
-    // Handle plain text files
     if ((mimeType && mimeType.startsWith('text/')) || lower.endsWith('.txt') || lower.endsWith('.md')) {
       const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
       return { text, status: 'Extracted as plain text' };
     }
     
-    // Handle DOCX files
     if (lower.endsWith('.docx')) {
       const zip = await JSZip.loadAsync(arrayBuffer);
       const docFile = zip.file('word/document.xml');
       if (docFile) {
-        const xml = await docFile.async('string');
-        const cleaned = xml
-          .replace(/<w:p[^>]*>/g, '\n')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/\s+\n/g, '\n')
-          .replace(/\s{2,}/g, ' ')
+        const content = await docFile.async('string');
+        const textContent = content
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/\s+/g, ' ')
           .trim();
-        return { text: cleaned, status: 'Extracted from DOCX' };
+        if (textContent) {
+          return { text: textContent, status: 'Extracted from DOCX' };
+        }
       }
       return { text: '', status: 'DOCX missing document.xml' };
     }
     
-    // Handle PDF files
     if (lower.endsWith('.pdf') || mimeType === 'application/pdf') {
       try {
         const uint8Array = new Uint8Array(arrayBuffer);
         const doc = await getDocument({ data: uint8Array, useSystemFonts: true }).promise;
         let fullText = '';
         
-        // Extract text from each page (limit to first 10 pages for performance)
         const maxPages = Math.min(doc.numPages, 10);
         for (let i = 1; i <= maxPages; i++) {
           const page = await doc.getPage(i);
@@ -244,124 +124,92 @@ const extractResumeText = async (
 };
 
 const serve_handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const bookingData: BookingRequest = await req.json();
-    
     console.log('Received booking request:', bookingData);
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    // Generate approval token
     const approvalToken = crypto.randomUUID();
-
-    // Insert booking request into database
-    const { data: bookingRequest, error: dbError } = await supabase
+    const { data: bookingRequest, error } = await supabase
       .from('booking_requests')
       .insert({
-        ...bookingData,
+        user_name: bookingData.user_name,
+        user_email: bookingData.user_email,
+        phone_number: bookingData.phone_number,
+        client_name: bookingData.client_name,
+        role_name: bookingData.role_name,
+        job_description: bookingData.job_description,
+        resume_file_path: bookingData.resume_file_path,
+        team_details: bookingData.team_details,
+        job_link: bookingData.job_link,
+        message: bookingData.message,
+        slot_date: bookingData.slot_date,
+        slot_start_time: bookingData.slot_start_time,
+        slot_end_time: bookingData.slot_end_time,
+        slot_duration_minutes: bookingData.slot_duration_minutes,
         approval_token: approvalToken,
       })
       .select()
       .single();
 
-    if (dbError) {
-      console.error('Database error:', dbError);
-      throw new Error(`Failed to save booking request: ${dbError.message}`);
+    if (error) {
+      console.error('Database error:', error);
+      throw new Error(`Failed to save booking request: ${error.message}`);
     }
 
     console.log('Booking request saved with ID:', bookingRequest.id);
 
-    // Send email notification using Resend with your Gmail as from address
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    const gmailUser = Deno.env.get('GMAIL_USER');
-    
-    if (!resendApiKey || !gmailUser) {
-      console.error('Email credentials not configured');
-      throw new Error('Email service not configured');
-    }
+    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    const approvalUrl = `https://rnkxaezxodhvrxameair.supabase.co/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
+    const rejectionUrl = `https://rnkxaezxodhvrxameair.supabase.co/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
-    const resend = new Resend(resendApiKey);
     console.log('Sending approval email to itmate.ai@gmail.com using Resend');
-    
-    const approvalUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
-    const rejectionUrl = `${supabaseUrl}/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
-    // Prepare resume attachment and extract text if available
-    let resumeAttachment = null;
-    let resumeStatus = 'No resume uploaded';
-    let resumeFilename: string | null = null;
-    let resumeTextContent: string = '';
-    
-    if (bookingData.resume_file_path) {
-      console.log('Processing resume attachment for path:', bookingData.resume_file_path);
+    let resumeAttachment: any = null;
+    let resumeStatus = 'No resume provided';
+    let resumeTextContent = '';
+    const resumeFilename = bookingData.resume_file_path;
+
+    if (resumeFilename) {
       try {
-        // Download the resume file from storage
-        const { data: resumeData, error: resumeError } = await supabase.storage
+        console.log('Processing resume attachment for path:', resumeFilename);
+
+        const { data: resumeData } = await supabase.storage
           .from('resumes')
-          .download(bookingData.resume_file_path);
-        
-        if (resumeError) {
-          console.error('Storage download error:', resumeError);
-          resumeStatus = `Resume upload failed: ${resumeError.message}`;
-        } else if (resumeData) {
-          console.log('Resume data downloaded successfully, size:', resumeData.size, 'type:', resumeData.type);
-          
-          // Convert file to base64 for email attachment
+          .download(resumeFilename);
+
+        if (resumeData) {
           const resumeArrayBuffer = await resumeData.arrayBuffer();
+          const mimeType = resumeData.type;
+          const fileExtension = resumeFilename.split('.').pop() || 'pdf';
+          const originalFilename = resumeFilename.split('-').slice(1).join('-');
+
+          console.log('Resume data downloaded successfully, size:', resumeArrayBuffer.byteLength, 'type:', mimeType);
           console.log('Resume array buffer size:', resumeArrayBuffer.byteLength);
-          
-          // Use a more efficient base64 conversion for large files
-          const uint8Array = new Uint8Array(resumeArrayBuffer);
-          let binaryString = '';
-          const chunkSize = 1024 * 64; // 64KB chunks
-          
-          for (let i = 0; i < uint8Array.length; i += chunkSize) {
-            const chunk = uint8Array.slice(i, i + chunkSize);
-            binaryString += String.fromCharCode(...chunk);
-          }
-          
-          const resumeBase64 = btoa(binaryString);
+
+          const resumeBase64 = encodeToBase64(new Uint8Array(resumeArrayBuffer));
           console.log('Base64 conversion completed, length:', resumeBase64.length);
-          
-          // Get original filename from path
-          const originalFilename = bookingData.resume_file_path.split('/').pop() || 'resume.pdf';
-          resumeFilename = originalFilename;
-          const fileExtension = originalFilename.split('.').pop()?.toLowerCase();
-          
-          // Determine MIME type
-          let mimeType = 'application/pdf';
-          if (fileExtension === 'docx') {
-            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-          } else if (fileExtension === 'doc') {
-            mimeType = 'application/msword';
-          } else if (fileExtension === 'txt') {
-            mimeType = 'text/plain';
-          } else if (fileExtension === 'md') {
-            mimeType = 'text/markdown';
-          }
-          
+
           resumeAttachment = {
             filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${fileExtension}`,
             content: resumeBase64,
             type: mimeType,
             disposition: 'attachment'
           };
-          
-          // Try to extract text content from resume for template placeholders
+
           console.log('Attempting to extract text from resume...');
           const extraction = await extractResumeText(resumeArrayBuffer, originalFilename, mimeType);
           console.log('Extraction result:', extraction.status);
           if (extraction.text) {
             resumeTextContent = extraction.text;
-            // Limit to avoid overly large emails
             const MAX_CHARS = 150_000;
             if (resumeTextContent.length > MAX_CHARS) {
               resumeTextContent = resumeTextContent.slice(0, MAX_CHARS) + '\n\n...[truncated]';
@@ -377,23 +225,42 @@ const serve_handler = async (req: Request): Promise<Response> => {
         }
       } catch (error) {
         console.error('Error processing resume attachment:', error);
-        // @ts-ignore - error could be unknown
         resumeStatus = `Resume processing failed: ${error.message || error}`;
       }
     }
 
-    // Enrich email with client research and AI templates
     const clientInfo = await fetchClientInfo(bookingData.client_name, bookingData.job_link);
     const resumeLine = resumeFilename ? `Attached - ${resumeFilename}` : 'Not provided';
 
-    // Build AI assistant templates as attachments with placeholders filled
     const roleName = bookingData.role_name;
-    const companyName = bookingData.client_name;
     const jd = bookingData.job_description;
     const resumeTextForTemplate = resumeTextContent || 'Resume text could not be extracted. Please refer to the attached resume file.';
 
-    const starTemplateContent = `
-You are an AI assistant designed to simulate an interviewee for a job interview. Your task is to provide realistic, human-like responses to interview questions based on a given transcription.
+    // Create HTML template function with proper formatting
+    const createHTMLTemplate = (content: string, title: string): string => {
+      return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>${title}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 40px; background: white; }
+        h1, h2, h3 { color: #333; margin: 20px 0 10px 0; }
+        strong { font-weight: bold; color: #333; }
+        ul { margin: 15px 0; padding-left: 20px; }
+        li { margin: 8px 0; }
+        p { margin: 12px 0; }
+        .placeholder { background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+${content.replace(/\n/g, '<br/>')}
+</body>
+</html>`;
+    };
+
+    // Your exact STAR template
+    const starTemplateContent = `You are an AI assistant designed to simulate an interviewee for a job interview. Your task is to provide realistic, human-like responses to interview questions based on a given transcription.
 - Here is the position you are interviewing for: ${roleName}
 - You will be provided with a real-time transcription of the interview. This transcription may contain spelling and grammar mistakes. 
 - Your goal is to identify the last question or topic being discussed and provide an appropriate response.
@@ -425,7 +292,7 @@ Please provide your response based on the last question or topic in the transcri
 
 The following is a description of the company I am interviewing with today -
 {
-${companyName}: ${clientInfo}
+${clientInfo}
 }
 
 The following is the Job Description:-
@@ -505,8 +372,8 @@ Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate 
 2) Please Give complete Humanized answers in a professional technical way. Please fine tune answers and don't give artificial answers.
 `.trim();
 
-    const standardDocContent = `
-You are an AI assistant designed to simulate an interviewee for a job interview. Your task is to provide realistic, human-like responses to interview questions based on a given transcription.
+    // Your exact standard template
+    const standardDocContent = `You are an AI assistant designed to simulate an interviewee for a job interview. Your task is to provide realistic, human-like responses to interview questions based on a given transcription.
 - Here is the position you are interviewing for: ${roleName}
 - You will be provided with a real-time transcription of the interview. This transcription may contain spelling and grammar mistakes. 
 - Your goal is to identify the last question or topic being discussed and provide an appropriate response.
@@ -533,19 +400,26 @@ Example output format:
 - Be as specific as possible while answering questions and don't use any complicated words, use simple English and be as specific as possible and give answers to the point. don't give useless information for example : if the question is "what is the importance of using tableu?" , just start with the answer , do not give these sentences like "the importance of tableu are:"
 both at the beginning of the answer and at the ending , use really simple and humanized words that everyone uses on a regular day to day life.
 
+
 The following is a description of the company I am interviewing with today -
 {
-${companyName}: ${clientInfo}
+
+${clientInfo}
+
 }
 
 The following is the Job Description:-
 {
+
 ${jd}
+
 }
 
 The following is the Resume:-
 {
+
 ${resumeTextForTemplate}
+
 }
 
 **Instructions To be followed: 
@@ -569,13 +443,13 @@ Note: (If anything is asked outside of the resume, please answer the question an
 3) Short, Direct Answer Identification Prompt:
 When the question focuses on a specific tool, method, or responsibility, respond directly with a concise answer. Avoid providing additional details or elaboration beyond what is necessary.
 
-Important instruction : ( Please don't give Artificial Intelligence answers and too much of description for normal simple questions, When answering most of the times directly start with the context, topic asked instead of giving lengthy introductions for everything asked and do not repeat the question in the answer , start directly from the actual point.
+Important instruction : ( Please don't give Artificial Intelligence answers and too much of description for normal simple questions, When answering most of the times directly start with the context, topic asked instead of giving lengthy introductions for everything asked and do not repeat the question in the answer , start directly from the actual point. 
 And when answering about projects assume a most real time project relevant and suitable to roles and responsibilities of that specific company/client from resume and answer the question in simple manner , by mentioning only required steps instead of mentioning all unnecessary steps and procedures.
 
 Very Important instruction : (* If there is/are no projects mentioned in resume , you only create a real time project and answer accordingly when asked for real time scenario questions and situational based questions*).
 
 Enhanced Prompt for better answers:-
-Here’s a refined prompt designed to ensure outputs align with the instructions:-
+Here's a refined prompt designed to ensure outputs align with the instructions:-
 Context:
 - You are an expert professional, trained to provide concise, human-like, and contextually relevant answers for various technical, behavioral, and scenario-based questions. Your tone is friendly yet professional, and you adapt your answers based on the complexity of the question.
 For behavioral questions, provide real-world examples aligned with professional experiences, keeping them concise yet impactful.
@@ -583,7 +457,7 @@ Adapt responses to reflect real-time project experience, creating examples if ne
 Examples like how to answer : ( These are just examples , based on these please give more better and accurate answers with perfect explanation ) 
 Reasoning (Technical Role):
 Question: "How do you balance technical debt with the need to deliver features quickly?"
-Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate the criticality of the feature, set aside time for incremental refactoring, and use tools like SonarQube to identify and manage debt while aligning with business needs."
+Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate the criticality of the feature, set aside time for incremental refactoring, and use tools like SonarQube to identify and manage debt while aligning with business needs."
 
 4) Contextual Adaptation:
 - Adapt responses based on the complexity of the question:
@@ -598,7 +472,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate 
 6) Responding Like a Human:
 - Avoid sounding like a machine by using natural, conversational language. Respond as a human would, focusing on real-world experiences, practical examples, and insights.
 - Relate answers to the job description and resume, creating connections between your expertise and the role in question.
-- Imp instruction : If a project isn’t mentioned in the resume, create a relevant real-time example that aligns with the role’s responsibilities and describe it as if it were real.
+- Imp instruction : If a project isn't mentioned in the resume, create a relevant real-time example that aligns with the role's responsibilities and describe it as if it were real.
 
 7) ** Example Responses: These are just examples , for these type of questions when you have a direct answer just give the answer
 - Question: "How do you ensure data lineage in an event-driven architecture?"
@@ -612,22 +486,25 @@ Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate 
 
 **** Most Important thing : - 
 1) The speed of generating answers for the questions asked should be full fast like a bullet train.
-2) Please Give complete Humanized answers in a professional technical way. Please fine tune answers and don't give artificial answers.
-`.trim();
+2) Please Give complete Humanized answers in a professional technical way. Please fine tune answers and don't give artificial answers.`.trim();
+
+    // Create HTML templates
+    const starHTMLContent = createHTMLTemplate(starTemplateContent, "STAR Technique Template");
+    const standardHTMLContent = createHTMLTemplate(standardDocContent, "Content Standard Template");
 
     // Prepare attachments
     const attachments = [] as any[];
     if (resumeAttachment) attachments.push(resumeAttachment);
     attachments.push({
-      filename: `STAR_Technique_${bookingData.user_name.replace(/\s+/g, '_')}.md`,
-      content: encodeToBase64(starTemplateContent),
-      type: 'text/markdown; charset=utf-8',
+      filename: `STAR_Technique_${bookingData.user_name.replace(/\s+/g, '_')}.html`,
+      content: encodeToBase64(starHTMLContent),
+      type: 'text/html; charset=utf-8',
       disposition: 'attachment'
     });
     attachments.push({
-      filename: `Content_Standard_${bookingData.user_name.replace(/\s+/g, '_')}.md`,
-      content: encodeToBase64(standardDocContent),
-      type: 'text/markdown; charset=utf-8',
+      filename: `Content_Standard_${bookingData.user_name.replace(/\s+/g, '_')}.html`,
+      content: encodeToBase64(standardHTMLContent),
+      type: 'text/html; charset=utf-8',
       disposition: 'attachment'
     });
 
@@ -659,7 +536,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate 
           <p>${resumeAttachment ? '📄 Resume is attached to this email' : `⚠️ ${resumeStatus}`}</p>
 
           <h3>Templates</h3>
-          <p>Two AI assistant templates are attached as Markdown files (STAR_Technique_*.md and Content_Standard_*.md), with placeholders filled (role, company, JD, and resume text when available).</p>
+          <p>Two AI assistant templates are attached as HTML files with proper formatting and placeholders filled.</p>
         </div>
         
         <div style="margin: 20px 0;">
@@ -672,17 +549,11 @@ Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate 
             ❌ REJECT
           </a>
         </div>
-        
-        <p style="color: #666; font-size: 14px;">
-          Click the buttons above to approve or reject this booking request.
-        </p>
       `,
       attachments
     });
 
     console.log('Approval email sent successfully:', emailResponse);
-
-    // Note: User confirmation emails will be sent after approval (limitation of Resend free tier)
 
     return new Response(
       JSON.stringify({ 
@@ -698,7 +569,10 @@ Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate 
   } catch (error) {
     console.error('Error in submit-booking-request function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: 'Failed to process booking request', 
+        details: error.message 
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

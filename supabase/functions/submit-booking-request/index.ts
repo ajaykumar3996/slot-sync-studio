@@ -202,7 +202,10 @@ const serve_handler = async (req: Request): Promise<Response> => {
             filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${fileExtension}`,
             content: resumeBase64,
             type: mimeType,
-            disposition: 'attachment'
+            disposition: 'attachment',
+            headers: {
+              'Content-Transfer-Encoding': 'base64'
+            }
           };
 
           console.log('Attempting to extract text from resume...');

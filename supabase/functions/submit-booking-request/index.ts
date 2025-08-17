@@ -64,7 +64,7 @@ const extractResumeText = async (
   try {
     if ((mimeType && mimeType.startsWith('text/')) || lower.endsWith('.txt') || lower.endsWith('.md')) {
       const text = new TextDecoder().decode(new Uint8Array(arrayBuffer));
-      return { text: text.slice(0, 50000), status: 'Extracted as plain text (truncated)' };
+      return { text, status: 'Extracted as plain text' };
     }
     
     if (lower.endsWith('.docx')) {
@@ -77,7 +77,7 @@ const extractResumeText = async (
           .replace(/\s+/g, ' ')
           .trim();
         if (textContent) {
-          return { text: textContent.slice(0, 50000), status: 'Extracted from DOCX (truncated)' };
+          return { text: textContent, status: 'Extracted from DOCX' };
         }
       }
       return { text: '', status: 'DOCX missing document.xml' };
@@ -85,17 +85,11 @@ const extractResumeText = async (
     
     if (lower.endsWith('.pdf') || mimeType === 'application/pdf') {
       try {
-        // Limit PDF processing for large files
-        if (arrayBuffer.byteLength > 3 * 1024 * 1024) { // 3MB limit
-          return { text: '', status: 'PDF too large for text extraction (>3MB)' };
-        }
-        
         const uint8Array = new Uint8Array(arrayBuffer);
         const doc = await getDocument({ data: uint8Array, useSystemFonts: true }).promise;
         let fullText = '';
         
-        // Reduce page limit for memory optimization
-        const maxPages = Math.min(doc.numPages, 3);
+        const maxPages = Math.min(doc.numPages, 10);
         for (let i = 1; i <= maxPages; i++) {
           const page = await doc.getPage(i);
           const textContent = await page.getTextContent();
@@ -104,9 +98,6 @@ const extractResumeText = async (
             .map((item: any) => item.str)
             .join(' ');
           fullText += pageText + '\n';
-          
-          // Stop early if we have enough text
-          if (fullText.length > 30000) break;
         }
         
         const cleanedText = fullText
@@ -115,7 +106,7 @@ const extractResumeText = async (
           .trim();
           
         if (cleanedText) {
-          return { text: cleanedText.slice(0, 30000), status: `Extracted from PDF (${maxPages} pages, truncated)` };
+          return { text: cleanedText, status: `Extracted from PDF (${maxPages} pages)` };
         } else {
           return { text: '', status: 'PDF text extraction returned empty content' };
         }
@@ -182,95 +173,94 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     console.log('Booking request saved with ID:', bookingRequest.id);
 
-    // Start background processing for heavy operations
-    const backgroundProcessing = (async () => {
-      console.log('📄 Starting background resume processing for path:', bookingData.resume_file_path);
-      
-      const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
-      const approvalUrl = `https://rnkxaezxodhvrxameair.supabase.co/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
-      const rejectionUrl = `https://rnkxaezxodhvrxameair.supabase.co/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
+    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    const approvalUrl = `https://rnkxaezxodhvrxameair.supabase.co/functions/v1/handle-booking-approval?token=${approvalToken}&action=approve`;
+    const rejectionUrl = `https://rnkxaezxodhvrxameair.supabase.co/functions/v1/handle-booking-approval?token=${approvalToken}&action=reject`;
 
-      let resumeAttachment: any = null;
-      let resumeStatus = 'No resume provided';
-      let resumeTextContent = '';
-      const resumeFilename = bookingData.resume_file_path;
+    console.log('Sending approval email to itmate.ai@gmail.com using Resend');
 
-      const resumeProcessingStartTime = performance.now();
+    let resumeAttachment: any = null;
+    let resumeStatus = 'No resume provided';
+    let resumeTextContent = '';
+    const resumeFilename = bookingData.resume_file_path;
 
-      if (resumeFilename) {
-        try {
-          console.log('📄 Starting resume processing for path:', resumeFilename);
+    const resumeProcessingStartTime = performance.now();
 
-          const resumeDownloadStartTime = performance.now();
-          const { data: resumeData } = await supabase.storage
-            .from('resumes')
-            .download(resumeFilename);
+    if (resumeFilename) {
+      try {
+        console.log('📄 Starting resume processing for path:', resumeFilename);
 
-          const resumeDownloadEndTime = performance.now();
-          console.log(`⬇️ Resume download completed in ${(resumeDownloadEndTime - resumeDownloadStartTime).toFixed(2)}ms`);
+        const resumeDownloadStartTime = performance.now();
+        const { data: resumeData } = await supabase.storage
+          .from('resumes')
+          .download(resumeFilename);
 
-          if (resumeData) {
-            let resumeArrayBuffer = await resumeData.arrayBuffer();
-            const mimeType = resumeData.type;
-            const fileExtension = resumeFilename.split('.').pop() || 'pdf';
-            const originalFilename = resumeFilename.split('-').slice(1).join('-');
+        const resumeDownloadEndTime = performance.now();
+        console.log(`⬇️ Resume download completed in ${(resumeDownloadEndTime - resumeDownloadStartTime).toFixed(2)}ms`);
 
-            console.log('Resume data downloaded successfully, size:', resumeArrayBuffer.byteLength, 'type:', mimeType);
+        if (resumeData) {
+          const resumeArrayBuffer = await resumeData.arrayBuffer();
+          const mimeType = resumeData.type;
+          const fileExtension = resumeFilename.split('.').pop() || 'pdf';
+          const originalFilename = resumeFilename.split('-').slice(1).join('-');
 
-            const base64ConversionStartTime = performance.now();
-            const resumeBase64 = encodeToBase64(new Uint8Array(resumeArrayBuffer));
-            const base64ConversionEndTime = performance.now();
-            console.log(`🔄 Base64 conversion completed in ${(base64ConversionEndTime - base64ConversionStartTime).toFixed(2)}ms, length:`, resumeBase64.length);
+          console.log('Resume data downloaded successfully, size:', resumeArrayBuffer.byteLength, 'type:', mimeType);
 
-            resumeAttachment = {
-              filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${fileExtension}`,
-              content: resumeBase64,
-              type: mimeType,
-              disposition: 'attachment'
-            };
+          const base64ConversionStartTime = performance.now();
+          const resumeBase64 = encodeToBase64(new Uint8Array(resumeArrayBuffer));
+          const base64ConversionEndTime = performance.now();
+          console.log(`🔄 Base64 conversion completed in ${(base64ConversionEndTime - base64ConversionStartTime).toFixed(2)}ms, length:`, resumeBase64.length);
 
-            const textExtractionStartTime = performance.now();
-            console.log('🔍 Starting text extraction from resume...');
-            const extraction = await extractResumeText(resumeArrayBuffer, originalFilename, mimeType);
-            const textExtractionEndTime = performance.now();
-            console.log(`📝 Text extraction completed in ${(textExtractionEndTime - textExtractionStartTime).toFixed(2)}ms. Status:`, extraction.status);
-            
-            // Clear the arrayBuffer from memory immediately
-            resumeArrayBuffer = null;
-            
-            if (extraction.text) {
-              resumeTextContent = extraction.text;
-              resumeStatus = `Resume attached and text extracted (${extraction.status})`;
-              console.log(`📊 Extracted text length: ${extraction.text.length} characters`);
-            } else {
-              resumeStatus = `Resume attached (text not extracted - ${extraction.status})`;
+          resumeAttachment = {
+            filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${fileExtension}`,
+            content: resumeBase64,
+            type: mimeType,
+            disposition: 'attachment'
+          };
+
+          const textExtractionStartTime = performance.now();
+          console.log('🔍 Starting text extraction from resume...');
+          const extraction = await extractResumeText(resumeArrayBuffer, originalFilename, mimeType);
+          const textExtractionEndTime = performance.now();
+          console.log(`📝 Text extraction completed in ${(textExtractionEndTime - textExtractionStartTime).toFixed(2)}ms. Status:`, extraction.status);
+          
+          if (extraction.text) {
+            resumeTextContent = extraction.text;
+            const MAX_CHARS = 150_000;
+            if (resumeTextContent.length > MAX_CHARS) {
+              resumeTextContent = resumeTextContent.slice(0, MAX_CHARS) + '\n\n...[truncated]';
             }
+            resumeStatus = `Resume attached and text extracted (${extraction.status})`;
+            console.log(`📊 Extracted text length: ${extraction.text.length} characters`);
           } else {
-            console.error('No resume data returned from storage');
-            resumeStatus = 'Resume download failed: No data returned';
+            resumeStatus = `Resume attached (text not extracted - ${extraction.status})`;
           }
-        } catch (error) {
-          console.error('Error processing resume attachment:', error);
-          resumeStatus = `Resume processing failed: ${error.message || error}`;
+        } else {
+          console.error('No resume data returned from storage');
+          resumeStatus = 'Resume download failed: No data returned';
         }
+      } catch (error) {
+        console.error('Error processing resume attachment:', error);
+        resumeStatus = `Resume processing failed: ${error.message || error}`;
       }
+    }
 
-      const resumeProcessingEndTime = performance.now();
-      console.log(`📄 Total resume processing time: ${(resumeProcessingEndTime - resumeProcessingStartTime).toFixed(2)}ms`);
+    const resumeProcessingEndTime = performance.now();
+    console.log(`📄 Total resume processing time: ${(resumeProcessingEndTime - resumeProcessingStartTime).toFixed(2)}ms`);
 
-      const clientInfoStartTime = performance.now();
-      const clientInfo = await fetchClientInfo(bookingData.client_name, bookingData.job_link);
-      const clientInfoEndTime = performance.now();
-      console.log(`🏢 Client info fetch completed in ${(clientInfoEndTime - clientInfoStartTime).toFixed(2)}ms`);
+    const clientInfoStartTime = performance.now();
+    const clientInfo = await fetchClientInfo(bookingData.client_name, bookingData.job_link);
+    const clientInfoEndTime = performance.now();
+    console.log(`🏢 Client info fetch completed in ${(clientInfoEndTime - clientInfoStartTime).toFixed(2)}ms`);
 
-      const resumeLine = resumeFilename ? `Attached - ${resumeFilename}` : 'Not provided';
+    const resumeLine = resumeFilename ? `Attached - ${resumeFilename}` : 'Not provided';
 
-      const roleName = bookingData.role_name;
-      const jd = bookingData.job_description;
-      const resumeTextForTemplate = resumeTextContent || 'Resume text could not be extracted. Please refer to the attached resume file.';
+    const roleName = bookingData.role_name;
+    const jd = bookingData.job_description;
+    const resumeTextForTemplate = resumeTextContent || 'Resume text could not be extracted. Please refer to the attached resume file.';
 
-      const templateGenerationStartTime = performance.now();
-      console.log('📋 Starting HTML template generation...');
+    const templateGenerationStartTime = performance.now();
+    console.log('📋 Starting HTML template generation...');
 
     // Create HTML template function with proper formatting
     const createHTMLTemplate = (content: string, title: string): string => {
@@ -619,30 +609,21 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
     console.log(`📧 Email sent successfully in ${(emailSendEndTime - emailSendStartTime).toFixed(2)}ms`);
     console.log('Email response:', emailResponse);
 
-      console.log(`🎯 TOTAL BACKGROUND PROCESSING TIME: ${totalTime.toFixed(2)}ms (${(totalTime / 1000).toFixed(2)}s)`);
-      console.log('⏱️ Background performance breakdown:');
-      console.log(`  - Resume processing: ${(resumeProcessingEndTime - resumeProcessingStartTime).toFixed(2)}ms`);
-      console.log(`  - Client info fetch: ${(clientInfoEndTime - clientInfoStartTime).toFixed(2)}ms`);
-      console.log(`  - Template generation: ${(templateGenerationEndTime - templateGenerationStartTime).toFixed(2)}ms`);
-      console.log(`  - Attachment preparation: ${(attachmentPrepEndTime - attachmentPrepStartTime).toFixed(2)}ms`);
-      console.log(`  - Email send: ${(emailSendEndTime - emailSendStartTime).toFixed(2)}ms`);
-      console.log('✅ Background email processing completed successfully');
-    })();
-
-    // Use EdgeRuntime.waitUntil for background processing
-    EdgeRuntime.waitUntil(backgroundProcessing);
-
-    // Return immediate response
-    const quickResponseTime = performance.now() - startTime;
-    console.log(`⚡ Quick response time: ${quickResponseTime.toFixed(2)}ms`);
-    console.log('✅ Booking request submitted, email processing in background');
+    console.log(`🎯 TOTAL PROCESSING TIME: ${totalTime.toFixed(2)}ms (${(totalTime / 1000).toFixed(2)}s)`);
+    console.log('⏱️ Performance breakdown:');
+    console.log(`  - Database save: ${(dbSaveTime - startTime).toFixed(2)}ms`);
+    console.log(`  - Resume processing: ${(resumeProcessingEndTime - resumeProcessingStartTime).toFixed(2)}ms`);
+    console.log(`  - Client info fetch: ${(clientInfoEndTime - clientInfoStartTime).toFixed(2)}ms`);
+    console.log(`  - Template generation: ${(templateGenerationEndTime - templateGenerationStartTime).toFixed(2)}ms`);
+    console.log(`  - Attachment preparation: ${(attachmentPrepEndTime - attachmentPrepStartTime).toFixed(2)}ms`);
+    console.log(`  - Email send: ${(emailSendEndTime - emailSendStartTime).toFixed(2)}ms`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         bookingId: bookingRequest.id,
         message: 'Booking request submitted successfully. You will receive a confirmation email once approved.',
-        processingTimeMs: quickResponseTime.toFixed(2)
+        processingTimeMs: totalTime.toFixed(2)
       }), 
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 

@@ -105,6 +105,11 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
     };
   };
 
+  const canFit = (hour: number, minute: number, duration: number) => {
+    const slotEnd = hour * 60 + minute + duration;
+    return slotEnd <= 18 * 60; // Must end by 6 PM
+  };
+
   const isSlotAvailable = (hour: number, minute: number, duration: 30 | 60) => {
     const slotStart = hour * 60 + minute;
     const slotEnd = slotStart + duration;
@@ -216,14 +221,28 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     ) : null}
                   </div>
                   
-                  {/* 1-hour slot button (positioned on the right) */}
-                  {!isWeekend && isSlotAvailable(hour, 0, 60) && (
+                  {/* 1-hour slot button from :00 (positioned on the right) */}
+                  {!isWeekend && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
                     <div className="absolute inset-0 flex items-center justify-end pr-2 z-20 pointer-events-none">
                       <Button 
                         size="sm" 
                         variant="outline" 
                         className="text-xs h-10 px-4 bg-green-50 hover:bg-green-100 border-green-400 text-green-800 pointer-events-auto"
                         onClick={() => handleSlotClick(hour, 0, 60)}
+                      >
+                        Book 1hr
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* 1-hour slot button from :30 (positioned on the left) */}
+                  {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
+                    <div className="absolute inset-0 flex items-center justify-start pl-2 z-20 pointer-events-none">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="text-xs h-10 px-4 bg-green-50 hover:bg-green-100 border-green-400 text-green-800 pointer-events-auto"
+                        onClick={() => handleSlotClick(hour, 30, 60)}
                       >
                         Book 1hr
                       </Button>
@@ -269,7 +288,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             </div>
           </div>
           <div className="text-xs text-muted-foreground">
-            Click on the available time slot buttons to book appointments. 30-minute slots are always visible, 1-hour slots appear on the right when the full hour is available.
+            Click on the available time slot buttons to book appointments. 30-minute slots are always visible, 1-hour slots appear on the left (:30 start) or right (:00 start) when the full hour is available.
           </div>
         </div>
       </CardContent>

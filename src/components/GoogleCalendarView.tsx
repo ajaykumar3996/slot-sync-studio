@@ -235,13 +235,13 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     </div>
                   )}
                   
-                  {/* 1-hour slot button from :30 (positioned at the 30-minute mark on the left) */}
+                  {/* 1-hour slot button from :30 (positioned spanning the hour boundary) */}
                   {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
-                    <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-start pl-2 z-25 pointer-events-none">
+                    <div className="absolute bottom-0 left-0 right-0 h-8 flex items-end justify-start pl-2 z-25 pointer-events-none">
                       <Button 
                         size="sm" 
                         variant="outline" 
-                        className="text-xs h-6 px-3 bg-green-50 hover:bg-green-100 border-green-400 text-green-800 pointer-events-auto"
+                        className="text-xs h-10 px-4 bg-green-50 hover:bg-green-100 border-green-400 text-green-800 pointer-events-auto transform translate-y-2"
                         onClick={() => handleSlotClick(hour, 30, 60)}
                       >
                         Book 1hr

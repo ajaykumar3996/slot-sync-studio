@@ -205,21 +205,23 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     ) : null}
                   </div>
                   
-                  {/* Second 30-minute slot */}
-                  <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
-                    {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="text-xs h-6 px-2 bg-green-100 hover:bg-green-200 border border-green-300 text-green-800"
-                        onClick={() => handleSlotClick(hour, 30, 30)}
-                      >
-                        Book 30m
-                      </Button>
-                    ) : !isWeekend ? (
-                      <div className="text-xs text-muted-foreground/50">Busy</div>
-                    ) : null}
-                  </div>
+                  {/* Second 30-minute slot - only show if not past 6:30 PM */}
+                  {hour < 18 && (
+                    <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
+                      {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="text-xs h-6 px-2 bg-green-100 hover:bg-green-200 border border-green-300 text-green-800"
+                          onClick={() => handleSlotClick(hour, 30, 30)}
+                        >
+                          Book 30m
+                        </Button>
+                      ) : !isWeekend ? (
+                        <div className="text-xs text-muted-foreground/50">Busy</div>
+                      ) : null}
+                    </div>
+                  )}
                   
                   {/* 1-hour slot button from :00 (positioned on the right) */}
                   {!isWeekend && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (

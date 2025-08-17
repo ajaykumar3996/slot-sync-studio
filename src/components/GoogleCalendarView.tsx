@@ -178,16 +178,18 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           {/* Time Grid */}
           <div className="border border-border rounded-lg overflow-hidden bg-background">
             {hours.map((hour, index) => (
-              <div key={hour} className="relative border-b border-border last:border-b-0 h-16">
+              <div key={hour} className={`relative border-b border-border last:border-b-0 ${hour === 18 ? 'h-8' : 'h-16'}`}>
                 {/* Hour Label */}
-                <div className="absolute left-0 top-0 w-16 h-full flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30">
+                <div className={`absolute left-0 top-0 w-16 ${hour === 18 ? 'h-8' : 'h-full'} flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30`}>
                   {convertTo12Hour(hour)}
                 </div>
                 
                 {/* Time Slots with permanent booking buttons */}
-                <div className="ml-16 relative h-full">
-                  {/* 30-minute divider line */}
-                  <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/50 z-5"></div>
+                <div className={`ml-16 relative ${hour === 18 ? 'h-8' : 'h-full'}`}>
+                  {/* 30-minute divider line - only show for non-6PM hours */}
+                  {hour < 18 && (
+                    <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/50 z-5"></div>
+                  )}
                   
                   {/* First 30-minute slot */}
                   <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center z-10">

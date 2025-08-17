@@ -188,39 +188,49 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
         if (resumeData) {
           const resumeArrayBuffer = await resumeData.arrayBuffer();
-          const mimeType = resumeData.type;
+          const mimeType = resumeData.type || 'application/octet-stream';
           const fileExtension = resumeFilename.split('.').pop() || 'pdf';
           const originalFilename = resumeFilename.split('-').slice(1).join('-');
 
           console.log('Resume data downloaded successfully, size:', resumeArrayBuffer.byteLength, 'type:', mimeType);
-          console.log('Resume array buffer size:', resumeArrayBuffer.byteLength);
 
-          const resumeBase64 = encodeToBase64(new Uint8Array(resumeArrayBuffer));
+          // Convert to base64 without any processing to preserve original file
+          const uint8Array = new Uint8Array(resumeArrayBuffer);
+          let binary = '';
+          for (let i = 0; i < uint8Array.byteLength; i++) {
+            binary += String.fromCharCode(uint8Array[i]);
+          }
+          const resumeBase64 = btoa(binary);
+
           console.log('Base64 conversion completed, length:', resumeBase64.length);
 
           resumeAttachment = {
             filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${fileExtension}`,
             content: resumeBase64,
             type: mimeType,
-            disposition: 'attachment',
-            headers: {
-              'Content-Transfer-Encoding': 'base64'
-            }
+            disposition: 'attachment'
           };
 
-          console.log('Attempting to extract text from resume...');
-          const extraction = await extractResumeText(resumeArrayBuffer, originalFilename, mimeType);
-          console.log('Extraction result:', extraction.status);
-          if (extraction.text) {
-            resumeTextContent = extraction.text;
-            const MAX_CHARS = 150_000;
-            if (resumeTextContent.length > MAX_CHARS) {
-              resumeTextContent = resumeTextContent.slice(0, MAX_CHARS) + '\n\n...[truncated]';
+          // Only attempt text extraction for analysis, don't modify the attachment
+          console.log('Attempting to extract text from resume for analysis...');
+          try {
+            const extraction = await extractResumeText(resumeArrayBuffer, originalFilename, mimeType);
+            console.log('Extraction result:', extraction.status);
+            if (extraction.text) {
+              resumeTextContent = extraction.text;
+              const MAX_CHARS = 150_000;
+              if (resumeTextContent.length > MAX_CHARS) {
+                resumeTextContent = resumeTextContent.slice(0, MAX_CHARS) + '\n\n...[truncated]';
+              }
+              resumeStatus = `Resume attached and text extracted (${extraction.status})`;
+            } else {
+              resumeStatus = `Resume attached (text not extracted - ${extraction.status})`;
             }
-            resumeStatus = `Resume attached and text extracted (${extraction.status})`;
-          } else {
-            resumeStatus = `Resume attached (text not extracted - ${extraction.status})`;
+          } catch (extractError) {
+            console.log('Text extraction failed, but resume will still be attached:', extractError);
+            resumeStatus = 'Resume attached (text extraction failed but file is preserved)';
           }
+          
           console.log('Resume attachment prepared successfully');
         } else {
           console.error('No resume data returned from storage');

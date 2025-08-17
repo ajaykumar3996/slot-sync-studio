@@ -237,8 +237,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* 1-hour slot button from :30 (positioned spanning from 30min mark to next hour's 30min mark) */}
                   {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
-                    <div className="absolute top-8 left-2 z-25 pointer-events-auto" style={{ height: '64px' }}>
-                      <div className="flex items-center h-full">
+                    <div className="absolute inset-0 z-30 pointer-events-none">
+                      <div className="absolute top-8 left-2 h-8 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
                           variant="outline" 

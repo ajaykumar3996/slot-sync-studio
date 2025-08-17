@@ -107,7 +107,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
 
   const canFit = (hour: number, minute: number, duration: number) => {
     const slotEnd = hour * 60 + minute + duration;
-    return slotEnd <= 18 * 60; // Must end by 6 PM
+    return slotEnd <= 18 * 60 + 30; // Must end by 6:30 PM
   };
 
   const isSlotAvailable = (hour: number, minute: number, duration: 30 | 60) => {

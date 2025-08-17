@@ -128,9 +128,12 @@ const serve_handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = performance.now();
+  console.log('🚀 Starting booking request processing at:', new Date().toISOString());
+
   try {
     const bookingData: BookingRequest = await req.json();
-    console.log('Received booking request:', bookingData);
+    console.log('📥 Received booking request:', bookingData);
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -165,6 +168,9 @@ const serve_handler = async (req: Request): Promise<Response> => {
       throw new Error(`Failed to save booking request: ${error.message}`);
     }
 
+    const dbSaveTime = performance.now();
+    console.log(`💾 Database save completed in ${(dbSaveTime - startTime).toFixed(2)}ms`);
+
     console.log('Booking request saved with ID:', bookingRequest.id);
 
     const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -178,13 +184,19 @@ const serve_handler = async (req: Request): Promise<Response> => {
     let resumeTextContent = '';
     const resumeFilename = bookingData.resume_file_path;
 
+    const resumeProcessingStartTime = performance.now();
+
     if (resumeFilename) {
       try {
-        console.log('Processing resume attachment for path:', resumeFilename);
+        console.log('📄 Starting resume processing for path:', resumeFilename);
 
+        const resumeDownloadStartTime = performance.now();
         const { data: resumeData } = await supabase.storage
           .from('resumes')
           .download(resumeFilename);
+
+        const resumeDownloadEndTime = performance.now();
+        console.log(`⬇️ Resume download completed in ${(resumeDownloadEndTime - resumeDownloadStartTime).toFixed(2)}ms`);
 
         if (resumeData) {
           const resumeArrayBuffer = await resumeData.arrayBuffer();
@@ -193,10 +205,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
           const originalFilename = resumeFilename.split('-').slice(1).join('-');
 
           console.log('Resume data downloaded successfully, size:', resumeArrayBuffer.byteLength, 'type:', mimeType);
-          console.log('Resume array buffer size:', resumeArrayBuffer.byteLength);
 
+          const base64ConversionStartTime = performance.now();
           const resumeBase64 = encodeToBase64(new Uint8Array(resumeArrayBuffer));
-          console.log('Base64 conversion completed, length:', resumeBase64.length);
+          const base64ConversionEndTime = performance.now();
+          console.log(`🔄 Base64 conversion completed in ${(base64ConversionEndTime - base64ConversionStartTime).toFixed(2)}ms, length:`, resumeBase64.length);
 
           resumeAttachment = {
             filename: `${bookingData.user_name.replace(/\s+/g, '_')}_resume.${fileExtension}`,
@@ -205,9 +218,12 @@ const serve_handler = async (req: Request): Promise<Response> => {
             disposition: 'attachment'
           };
 
-          console.log('Attempting to extract text from resume...');
+          const textExtractionStartTime = performance.now();
+          console.log('🔍 Starting text extraction from resume...');
           const extraction = await extractResumeText(resumeArrayBuffer, originalFilename, mimeType);
-          console.log('Extraction result:', extraction.status);
+          const textExtractionEndTime = performance.now();
+          console.log(`📝 Text extraction completed in ${(textExtractionEndTime - textExtractionStartTime).toFixed(2)}ms. Status:`, extraction.status);
+          
           if (extraction.text) {
             resumeTextContent = extraction.text;
             const MAX_CHARS = 150_000;
@@ -215,10 +231,10 @@ const serve_handler = async (req: Request): Promise<Response> => {
               resumeTextContent = resumeTextContent.slice(0, MAX_CHARS) + '\n\n...[truncated]';
             }
             resumeStatus = `Resume attached and text extracted (${extraction.status})`;
+            console.log(`📊 Extracted text length: ${extraction.text.length} characters`);
           } else {
             resumeStatus = `Resume attached (text not extracted - ${extraction.status})`;
           }
-          console.log('Resume attachment prepared successfully');
         } else {
           console.error('No resume data returned from storage');
           resumeStatus = 'Resume download failed: No data returned';
@@ -229,12 +245,22 @@ const serve_handler = async (req: Request): Promise<Response> => {
       }
     }
 
+    const resumeProcessingEndTime = performance.now();
+    console.log(`📄 Total resume processing time: ${(resumeProcessingEndTime - resumeProcessingStartTime).toFixed(2)}ms`);
+
+    const clientInfoStartTime = performance.now();
     const clientInfo = await fetchClientInfo(bookingData.client_name, bookingData.job_link);
+    const clientInfoEndTime = performance.now();
+    console.log(`🏢 Client info fetch completed in ${(clientInfoEndTime - clientInfoStartTime).toFixed(2)}ms`);
+
     const resumeLine = resumeFilename ? `Attached - ${resumeFilename}` : 'Not provided';
 
     const roleName = bookingData.role_name;
     const jd = bookingData.job_description;
     const resumeTextForTemplate = resumeTextContent || 'Resume text could not be extracted. Please refer to the attached resume file.';
+
+    const templateGenerationStartTime = performance.now();
+    console.log('📋 Starting HTML template generation...');
 
     // Create HTML template function with proper formatting
     const createHTMLTemplate = (content: string, title: string): string => {
@@ -332,7 +358,7 @@ And when answering about projects assume a most real time project relevant and s
 Very Important instruction : (* If there is/are no projects mentioned in resume , you only create a real time project and answer accordingly when asked for real time scenario questions and situational based questions*).
 
 Enhanced Prompt for better answers:-
-Here’s a refined prompt designed to ensure outputs align with the instructions:-
+Here's a refined prompt designed to ensure outputs align with the instructions:-
 Context:
 - You are an expert professional, trained to provide concise, human-like, and contextually relevant answers for various technical, behavioral, and scenario-based questions. Your tone is friendly yet professional, and you adapt your answers based on the complexity of the question.
 For behavioral questions, provide real-world examples aligned with professional experiences, keeping them concise yet impactful.
@@ -340,7 +366,7 @@ Adapt responses to reflect real-time project experience, creating examples if ne
 Examples like how to answer : ( These are just examples , based on these please give more better and accurate answers with perfect explanation ) 
 Reasoning (Technical Role):
 Question: "How do you balance technical debt with the need to deliver features quickly?"
-Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate the criticality of the feature, set aside time for incremental refactoring, and use tools like SonarQube to identify and manage debt while aligning with business needs."
+Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate the criticality of the feature, set aside time for incremental refactoring, and use tools like SonarQube to identify and manage debt while aligning with business needs."
 
 4) Contextual Adaptation:
 - Adapt responses based on the complexity of the question:
@@ -355,7 +381,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I’d evaluate 
 6) Responding Like a Human:
 - Avoid sounding like a machine by using natural, conversational language. Respond as a human would, focusing on real-world experiences, practical examples, and insights.
 - Relate answers to the job description and resume, creating connections between your expertise and the role in question.
-- Imp instruction : If a project isn’t mentioned in the resume, create a relevant real-time example that aligns with the role’s responsibilities and describe it as if it were real.
+- Imp instruction : If a project isn't mentioned in the resume, create a relevant real-time example that aligns with the role's responsibilities and describe it as if it were real.
 
 7) ** Example Responses: These are just examples , for these type of questions when you have a direct answer just give the answer
 - Question: "How do you ensure data lineage in an event-driven architecture?"
@@ -492,21 +518,45 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
     const starHTMLContent = createHTMLTemplate(starTemplateContent, "STAR Technique Template");
     const standardHTMLContent = createHTMLTemplate(standardDocContent, "Content Standard Template");
 
+    const templateGenerationEndTime = performance.now();
+    console.log(`📋 HTML template generation completed in ${(templateGenerationEndTime - templateGenerationStartTime).toFixed(2)}ms`);
+
+    const attachmentPrepStartTime = performance.now();
+    console.log('📎 Starting attachment preparation...');
+
     // Prepare attachments
     const attachments = [] as any[];
     if (resumeAttachment) attachments.push(resumeAttachment);
+    
+    const starBase64StartTime = performance.now();
+    const starAttachmentContent = encodeToBase64(starHTMLContent);
+    const starBase64EndTime = performance.now();
+    console.log(`🌟 STAR template base64 encoding completed in ${(starBase64EndTime - starBase64StartTime).toFixed(2)}ms`);
+    
     attachments.push({
       filename: `STAR_Technique_${bookingData.user_name.replace(/\s+/g, '_')}.html`,
-      content: encodeToBase64(starHTMLContent),
+      content: starAttachmentContent,
       type: 'text/html; charset=utf-8',
       disposition: 'attachment'
     });
+    
+    const standardBase64StartTime = performance.now();
+    const standardAttachmentContent = encodeToBase64(standardHTMLContent);
+    const standardBase64EndTime = performance.now();
+    console.log(`📝 Standard template base64 encoding completed in ${(standardBase64EndTime - standardBase64StartTime).toFixed(2)}ms`);
+    
     attachments.push({
       filename: `Content_Standard_${bookingData.user_name.replace(/\s+/g, '_')}.html`,
-      content: encodeToBase64(standardHTMLContent),
+      content: standardAttachmentContent,
       type: 'text/html; charset=utf-8',
       disposition: 'attachment'
     });
+
+    const attachmentPrepEndTime = performance.now();
+    console.log(`📎 Attachment preparation completed in ${(attachmentPrepEndTime - attachmentPrepStartTime).toFixed(2)}ms`);
+
+    const emailSendStartTime = performance.now();
+    console.log('📧 Starting email send...');
 
     const emailResponse = await resend.emails.send({
       from: "Book My Slot <anand@bookmyslot.me>",
@@ -553,13 +603,27 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
       attachments
     });
 
-    console.log('Approval email sent successfully:', emailResponse);
+    const emailSendEndTime = performance.now();
+    const totalTime = emailSendEndTime - startTime;
+
+    console.log(`📧 Email sent successfully in ${(emailSendEndTime - emailSendStartTime).toFixed(2)}ms`);
+    console.log('Email response:', emailResponse);
+
+    console.log(`🎯 TOTAL PROCESSING TIME: ${totalTime.toFixed(2)}ms (${(totalTime / 1000).toFixed(2)}s)`);
+    console.log('⏱️ Performance breakdown:');
+    console.log(`  - Database save: ${(dbSaveTime - startTime).toFixed(2)}ms`);
+    console.log(`  - Resume processing: ${(resumeProcessingEndTime - resumeProcessingStartTime).toFixed(2)}ms`);
+    console.log(`  - Client info fetch: ${(clientInfoEndTime - clientInfoStartTime).toFixed(2)}ms`);
+    console.log(`  - Template generation: ${(templateGenerationEndTime - templateGenerationStartTime).toFixed(2)}ms`);
+    console.log(`  - Attachment preparation: ${(attachmentPrepEndTime - attachmentPrepStartTime).toFixed(2)}ms`);
+    console.log(`  - Email send: ${(emailSendEndTime - emailSendStartTime).toFixed(2)}ms`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         bookingId: bookingRequest.id,
-        message: 'Booking request submitted successfully. You will receive a confirmation email once approved.' 
+        message: 'Booking request submitted successfully. You will receive a confirmation email once approved.',
+        processingTimeMs: totalTime.toFixed(2)
       }), 
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -567,11 +631,15 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
     );
 
   } catch (error) {
-    console.error('Error in submit-booking-request function:', error);
+    const errorTime = performance.now();
+    const totalErrorTime = errorTime - startTime;
+    console.error(`❌ Error in submit-booking-request function after ${totalErrorTime.toFixed(2)}ms:`, error);
+    
     return new Response(
       JSON.stringify({ 
         error: 'Failed to process booking request', 
-        details: error.message 
+        details: error.message,
+        processingTimeMs: totalErrorTime.toFixed(2)
       }),
       {
         status: 500,

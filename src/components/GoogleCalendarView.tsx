@@ -191,7 +191,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* First 30-minute slot */}
                   <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center z-10">
-                    {!isWeekend && isSlotAvailable(hour, 0, 30) ? (
+                    {!isWeekend && isSlotAvailable(hour, 0, 30) && canFit(hour, 0, 30) ? (
                       <Button 
                         size="sm" 
                         variant="ghost" 
@@ -207,7 +207,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* Second 30-minute slot */}
                   <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
-                    {!isWeekend && isSlotAvailable(hour, 30, 30) ? (
+                    {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
                       <Button 
                         size="sm" 
                         variant="ghost" 

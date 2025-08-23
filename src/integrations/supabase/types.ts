@@ -23,6 +23,7 @@ export type Database = {
           job_description: string
           job_link: string | null
           message: string | null
+          payment_screenshot_path: string | null
           phone_number: string
           resume_file_path: string | null
           role_name: string
@@ -45,6 +46,7 @@ export type Database = {
           job_description?: string
           job_link?: string | null
           message?: string | null
+          payment_screenshot_path?: string | null
           phone_number?: string
           resume_file_path?: string | null
           role_name?: string
@@ -67,6 +69,7 @@ export type Database = {
           job_description?: string
           job_link?: string | null
           message?: string | null
+          payment_screenshot_path?: string | null
           phone_number?: string
           resume_file_path?: string | null
           role_name?: string

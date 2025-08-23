@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, User, Mail, MessageSquare, Phone, Building, Briefcase, FileText, Users, Link } from "lucide-react";
+import { Calendar, Clock, User, Mail, MessageSquare, Phone, Building, Briefcase, FileText, Users, Link, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -36,6 +36,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
     message: ""
   });
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [paymentScreenshot, setPaymentScreenshot] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -45,10 +46,10 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
     // Validate required fields
     if (!slot || !formData.name.trim() || !formData.email.trim() || 
         !formData.phoneNumber.trim() || !formData.clientName.trim() || 
-        !formData.roleName.trim() || !formData.jobDescription.trim() || !resumeFile) {
+        !formData.roleName.trim() || !formData.jobDescription.trim() || !resumeFile || !paymentScreenshot) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields and upload your resume.",
+        description: "Please fill in all required fields and upload both your resume and payment screenshot.",
         variant: "destructive",
       });
       return;
@@ -58,11 +59,12 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
 
     try {
       let resumeFilePath = null;
+      let paymentScreenshotPath = null;
       
       // Upload resume file if provided
       if (resumeFile) {
         const fileExt = resumeFile.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const fileName = `resume-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('resumes')
@@ -76,6 +78,23 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
         resumeFilePath = uploadData.path;
       }
 
+      // Upload payment screenshot if provided
+      if (paymentScreenshot) {
+        const fileExt = paymentScreenshot.name.split('.').pop();
+        const fileName = `payment-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('resumes')
+          .upload(fileName, paymentScreenshot);
+
+        if (uploadError) {
+          console.error('Payment screenshot upload error:', uploadError);
+          throw new Error('Failed to upload payment screenshot');
+        }
+        
+        paymentScreenshotPath = uploadData.path;
+      }
+
       // Submit booking request via Supabase edge function
       const { data, error } = await supabase.functions.invoke('submit-booking-request', {
         body: {
@@ -86,6 +105,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
           role_name: formData.roleName.trim(),
           job_description: formData.jobDescription.trim(),
           resume_file_path: resumeFilePath,
+          payment_screenshot_path: paymentScreenshotPath,
           team_details: formData.teamDetails.trim() || null,
           job_link: formData.jobLink.trim() || null,
           message: formData.message.trim() || null,
@@ -118,6 +138,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
         message: "" 
       });
       setResumeFile(null);
+      setPaymentScreenshot(null);
       onClose();
     } catch (error) {
       console.error('Error submitting booking:', error);
@@ -292,6 +313,49 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
               <p className="text-xs text-muted-foreground">Only PDF and DOCX files up to 10MB</p>
               {resumeFile && (
                 <p className="text-sm text-muted-foreground">Selected: {resumeFile.name}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="paymentScreenshot" className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                Payment Screenshot *
+              </Label>
+              <Input
+                id="paymentScreenshot"
+                type="file"
+                accept=".png,.jpg,.jpeg,.webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const fileExt = file.name.split('.').pop()?.toLowerCase();
+                    if (!['png', 'jpg', 'jpeg', 'webp'].includes(fileExt || '')) {
+                      toast({
+                        title: "Invalid File Type",
+                        description: "Please upload only PNG, JPG, JPEG, or WEBP image files.",
+                        variant: "destructive",
+                      });
+                      e.target.value = '';
+                      return;
+                    }
+                    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                      toast({
+                        title: "File Too Large",
+                        description: "Please upload a file smaller than 10MB.",
+                        variant: "destructive",
+                      });
+                      e.target.value = '';
+                      return;
+                    }
+                  }
+                  setPaymentScreenshot(file || null);
+                }}
+                required
+                className="h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+              />
+              <p className="text-xs text-muted-foreground">Only PNG, JPG, JPEG, or WEBP files up to 10MB</p>
+              {paymentScreenshot && (
+                <p className="text-sm text-muted-foreground">Selected: {paymentScreenshot.name}</p>
               )}
             </div>
 

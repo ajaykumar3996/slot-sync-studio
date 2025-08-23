@@ -17,6 +17,7 @@ interface BookingRequest {
   role_name: string;
   job_description: string;
   resume_file_path?: string;
+  payment_screenshot_path?: string;
   team_details?: string;
   job_link?: string;
   message?: string;
@@ -148,6 +149,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         role_name: bookingData.role_name,
         job_description: bookingData.job_description,
         resume_file_path: bookingData.resume_file_path,
+        payment_screenshot_path: bookingData.payment_screenshot_path,
         team_details: bookingData.team_details,
         job_link: bookingData.job_link,
         message: bookingData.message,
@@ -177,6 +179,10 @@ const serve_handler = async (req: Request): Promise<Response> => {
     let resumeStatus = 'No resume provided';
     let resumeTextContent = '';
     const resumeFilename = bookingData.resume_file_path;
+    
+    let paymentAttachment: any = null;
+    let paymentStatus = 'No payment screenshot provided';
+    const paymentFilename = bookingData.payment_screenshot_path;
 
     if (resumeFilename) {
       try {
@@ -239,6 +245,49 @@ const serve_handler = async (req: Request): Promise<Response> => {
       } catch (error) {
         console.error('Error processing resume attachment:', error);
         resumeStatus = `Resume processing failed: ${error.message || error}`;
+      }
+    }
+
+    // Process payment screenshot if provided
+    if (paymentFilename) {
+      try {
+        console.log('Processing payment screenshot for path:', paymentFilename);
+
+        const { data: paymentData } = await supabase.storage
+          .from('resumes')
+          .download(paymentFilename);
+
+        if (paymentData) {
+          const paymentArrayBuffer = await paymentData.arrayBuffer();
+          const mimeType = paymentData.type || 'application/octet-stream';
+          const fileExtension = paymentFilename.split('.').pop() || 'png';
+
+          console.log('Payment screenshot downloaded successfully, size:', paymentArrayBuffer.byteLength, 'type:', mimeType);
+
+          // Convert to base64 for email attachment
+          const uint8Array = new Uint8Array(paymentArrayBuffer);
+          let binary = '';
+          for (let i = 0; i < uint8Array.byteLength; i++) {
+            binary += String.fromCharCode(uint8Array[i]);
+          }
+          const paymentBase64 = btoa(binary);
+
+          paymentAttachment = {
+            filename: `${bookingData.user_name.replace(/\s+/g, '_')}_payment_screenshot.${fileExtension}`,
+            content: paymentBase64,
+            type: mimeType,
+            disposition: 'attachment'
+          };
+
+          paymentStatus = 'Payment screenshot attached';
+          console.log('Payment screenshot attachment prepared successfully');
+        } else {
+          console.error('No payment screenshot data returned from storage');
+          paymentStatus = 'Payment screenshot download failed: No data returned';
+        }
+      } catch (error) {
+        console.error('Error processing payment screenshot:', error);
+        paymentStatus = `Payment screenshot processing failed: ${error.message || error}`;
       }
     }
 
@@ -508,6 +557,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
     // Prepare attachments
     const attachments = [] as any[];
     if (resumeAttachment) attachments.push(resumeAttachment);
+    if (paymentAttachment) attachments.push(paymentAttachment);
     attachments.push({
       filename: `STAR_Technique_${bookingData.user_name.replace(/\s+/g, '_')}.html`,
       content: encodeToBase64(starHTMLContent),
@@ -545,8 +595,9 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
           <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
           <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
           
-          <h3>Resume Status</h3>
-          <p>${resumeAttachment ? '📄 Resume is attached to this email' : `⚠️ ${resumeStatus}`}</p>
+          <h3>Attachments</h3>
+          <p><strong>Resume:</strong> ${resumeAttachment ? '📄 Resume is attached to this email' : `⚠️ ${resumeStatus}`}</p>
+          <p><strong>Payment Screenshot:</strong> ${paymentAttachment ? '💳 Payment screenshot is attached to this email' : `⚠️ ${paymentStatus}`}</p>
 
           <h3>Templates</h3>
           <p>Two AI assistant templates are attached as HTML files with proper formatting and placeholders filled.</p>

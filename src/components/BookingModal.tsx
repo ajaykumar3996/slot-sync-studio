@@ -344,38 +344,48 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
                 <CreditCard className="h-4 w-4" />
                 Payment Screenshot *
               </Label>
-              <Input
-                id="paymentScreenshot"
-                type="file"
-                accept=".png,.jpg,.jpeg,.webp"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const fileExt = file.name.split('.').pop()?.toLowerCase();
-                    if (!['png', 'jpg', 'jpeg', 'webp'].includes(fileExt || '')) {
-                      toast({
-                        title: "Invalid File Type",
-                        description: "Please upload only PNG, JPG, JPEG, or WEBP image files.",
-                        variant: "destructive",
-                      });
-                      e.target.value = '';
-                      return;
+              <div className="relative w-full h-12 border border-input rounded-md bg-background flex items-center justify-start px-3">
+                <Input
+                  id="paymentScreenshot"
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const fileExt = file.name.split('.').pop()?.toLowerCase();
+                      if (!['png', 'jpg', 'jpeg', 'webp'].includes(fileExt || '')) {
+                        toast({
+                          title: "Invalid File Type",
+                          description: "Please upload only PNG, JPG, JPEG, or WEBP image files.",
+                          variant: "destructive",
+                        });
+                        e.target.value = '';
+                        return;
+                      }
+                      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                        toast({
+                          title: "File Too Large",
+                          description: "Please upload a file smaller than 10MB.",
+                          variant: "destructive",
+                        });
+                        e.target.value = '';
+                        return;
+                      }
                     }
-                    if (file.size > 10 * 1024 * 1024) { // 10MB limit
-                      toast({
-                        title: "File Too Large",
-                        description: "Please upload a file smaller than 10MB.",
-                        variant: "destructive",
-                      });
-                      e.target.value = '';
-                      return;
-                    }
-                  }
-                  setPaymentScreenshot(file || null);
-                }}
-                required
-                className="w-full h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
-              />
+                    setPaymentScreenshot(file || null);
+                  }}
+                  required
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer file:cursor-pointer"
+                />
+                <div className="flex items-center pointer-events-none">
+                  <div className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-semibold mr-3">
+                    Choose File
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {paymentScreenshot ? paymentScreenshot.name : "No file chosen"}
+                  </span>
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">Only PNG, JPG, JPEG, or WEBP files up to 10MB</p>
               {paymentScreenshot && (
                 <p className="text-sm text-muted-foreground">Selected: {paymentScreenshot.name}</p>

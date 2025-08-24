@@ -64,7 +64,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
               head_cell: "text-muted-foreground rounded-md flex-1 font-normal text-sm flex items-center justify-center h-12",
               row: "flex w-full mb-1",
               cell: "flex-1 text-center text-sm relative p-0 focus-within:relative focus-within:z-20",
-              day: "w-full h-12 p-0 font-normal aria-selected:opacity-100 rounded-lg hover:bg-primary/20 hover:text-primary focus:bg-primary/20 focus:text-primary transition-colors",
+              day: "w-full h-12 p-0 font-normal bg-transparent hover:bg-primary/20 hover:text-primary focus:bg-primary/20 focus:text-primary transition-colors rounded-lg",
               day_selected: "bg-primary/20 text-primary hover:bg-primary/20 hover:text-primary focus:bg-primary/20 focus:text-primary border border-primary/30 rounded-lg",
               day_today: "font-semibold rounded-lg",
               day_outside: "text-muted-foreground opacity-50",

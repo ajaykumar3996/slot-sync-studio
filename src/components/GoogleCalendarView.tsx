@@ -249,8 +249,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
                       <Button 
                         size="sm" 
-                        className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm bg-background/100"
-                        style={{ backgroundColor: 'hsl(var(--success) / 0.2)' }}
+                        className="text-xs h-10 px-4 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm"
+                        style={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--success) / 0.3)' }}
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
                         1 Hour
@@ -264,8 +264,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
-                          className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
-                          style={{ backgroundColor: 'hsl(var(--success) / 0.2)' }}
+                          className="text-xs h-10 px-4 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
+                          style={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--success) / 0.3)' }}
                           onClick={() => handleSlotClick(hour, 30, 60)}
                         >
                           1 Hour

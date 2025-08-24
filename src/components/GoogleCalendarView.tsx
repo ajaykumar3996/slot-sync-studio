@@ -249,7 +249,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
                       <Button 
                         size="sm" 
-                        className="text-xs h-10 px-4 bg-background border-2 border-primary/30 text-primary hover:bg-primary/10 font-medium pointer-events-auto shadow-lg"
+                        className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
                         1 Hour
@@ -263,7 +263,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
-                          className="text-xs h-10 px-4 bg-background border-2 border-primary/30 text-primary hover:bg-primary/10 font-medium shadow-lg"
+                          className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
                           onClick={() => handleSlotClick(hour, 30, 60)}
                         >
                           1 Hour
@@ -307,11 +307,11 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-3 bg-success/20 border border-success/30 rounded-md"></div>
-              <span className="font-medium">30min Slots</span>
+              <span className="font-medium">Available Slots</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 bg-primary/20 border border-primary/30 rounded-md"></div>
-              <span className="font-medium">1hr Slots</span>
+              <div className="w-4 h-3 bg-success/20 border border-success/30 rounded-md"></div>
+              <span className="font-medium">Available Slots</span>
             </div>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">

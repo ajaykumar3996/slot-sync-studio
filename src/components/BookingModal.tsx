@@ -321,7 +321,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
                   setResumeFile(file || null);
                 }}
                 required
-                className="h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+                className="w-full h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
               />
               <p className="text-xs text-muted-foreground">Only PDF and DOCX files up to 10MB</p>
               {resumeFile && (
@@ -364,7 +364,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
                   setPaymentScreenshot(file || null);
                 }}
                 required
-                className="h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+                className="w-full h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
               />
               <p className="text-xs text-muted-foreground">Only PNG, JPG, JPEG, or WEBP files up to 10MB</p>
               {paymentScreenshot && (

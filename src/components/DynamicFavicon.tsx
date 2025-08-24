@@ -1,23 +1,25 @@
 import { useEffect } from "react";
 
 /**
- * Dynamic favicon: square calendar outline + blue day number inside.
- * - No top bar fill
- * - Outline + posts + seam line (like your left-side icon)
- * - Day number is blue and centered under the seam
+ * Dynamic favicon: circular halo + outlined calendar + blue day number inside.
+ * - No inner seam/line
+ * - Small binder posts at the top (optional via props)
+ * - Updates at midnight in the chosen IANA time zone
  */
 export default function DynamicFavicon(props: {
   timeZone?: string;
-  sizes?: number[];        // output icon sizes
-  baseSize?: number;       // internal render resolution
+  sizes?: number[];          // output sizes
+  baseSize?: number;         // internal render resolution (higher = crisper)
   className?: string;
 
-  // Styling overrides (optional)
-  outlineColor?: string;   // calendar outline & seam & posts
-  numberColor?: string;    // day number color
-  fillColor?: string;      // inside fill (white looks best)
-  background?: string | null; // page-agnostic halo; set null for transparent
-  radius?: number;         // calendar corner radius
+  // Style overrides
+  haloColor?: string | null; // null disables halo
+  haloOpacity?: number;      // 0..1
+  calendarFill?: string;     // inside of the calendar (usually white)
+  calendarStroke?: string;   // outline color (brand blue)
+  numberColor?: string;      // day number color (brand blue)
+  showPosts?: boolean;       // binder posts
+  radius?: number;           // calendar corner radius (px at baseSize)
 }) {
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -26,13 +28,15 @@ export default function DynamicFavicon(props: {
       timeZone: props.timeZone ?? "",
       sizes: props.sizes ?? [64, 32, 16],
       baseSize: props.baseSize ?? 224,
-      className: props.className ?? "dynamic-favicon-outline-cal",
+      className: props.className ?? "dynamic-favicon",
 
-      outlineColor: props.outlineColor ?? "#2563EB", // blue-600
-      numberColor: props.numberColor ?? "#2563EB",   // blue number
-      fillColor: props.fillColor ?? "#FFFFFF",
-      background: props.background ?? "rgba(37, 99, 235, 0.08)", // soft halo; set null to remove
-      radius: props.radius ?? 18,
+      haloColor: props.haloColor === undefined ? "#2563EB" : props.haloColor, // brand blue halo
+      haloOpacity: props.haloOpacity ?? 0.10,
+      calendarFill: props.calendarFill ?? "#FFFFFF",
+      calendarStroke: props.calendarStroke ?? "#2563EB",
+      numberColor: props.numberColor ?? "#2563EB",
+      showPosts: props.showPosts ?? true,
+      radius: props.radius ?? 14,
 
       fontFamily:
         "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
@@ -83,13 +87,19 @@ export default function DynamicFavicon(props: {
       ctx.closePath();
     };
 
-    const fitFont = (ctx: CanvasRenderingContext2D, text: string, S: number, maxW: number) => {
-      let size = S * 0.7;
+    const fitFont = (
+      ctx: CanvasRenderingContext2D,
+      text: string,
+      innerW: number,
+      base: number
+    ) => {
+      let size = base * 0.72;
       while (true) {
         ctx.font = `900 ${Math.round(size)}px ${cfg.fontFamily}`;
-        if (ctx.measureText(text).width <= maxW) break;
+        const w = ctx.measureText(text).width;
+        if (w <= innerW * 0.82) break;
         size *= 0.97;
-        if (size < S * 0.45) break;
+        if (size < base * 0.46) break;
       }
       return size;
     };
@@ -100,59 +110,62 @@ export default function DynamicFavicon(props: {
       c.width = c.height = S;
       const ctx = c.getContext("2d")!;
 
-      // optional soft circular halo (like your page icon background)
-      if (cfg.background) {
-        ctx.fillStyle = cfg.background;
+      // 1) Soft circular halo
+      if (cfg.haloColor) {
+        const halo = ctx.createRadialGradient(S / 2, S / 2, S * 0.05, S / 2, S / 2, S * 0.46);
+        halo.addColorStop(0, `rgba(255,255,255,0)`); // subtle center
+        // convert hex to rgba
+        const hex = cfg.haloColor.replace("#", "");
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        halo.addColorStop(1, `rgba(${r},${g},${b},${cfg.haloOpacity})`);
+        ctx.fillStyle = halo;
         ctx.beginPath();
-        ctx.arc(S / 2, S / 2, S * 0.46, 0, Math.PI * 2);
+        ctx.arc(S / 2, S / 2, S * 0.48, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // calendar container (white fill, blue outline)
-      const m = Math.round(S * 0.16);
-      const bw = Math.max(4, Math.round(S / 16)); // stroke scales; ~1px at 16
-      rrect(ctx, m, m, S - 2 * m, S - 2 * m, cfg.radius);
-      ctx.fillStyle = cfg.fillColor;
+      // 2) Calendar square (white fill + blue outline)
+      const m = Math.round(S * 0.18); // margin from canvas
+      const w = S - 2 * m;
+      const h = w;
+      const stroke = Math.max(4, Math.round(S / 16)); // scales to ~1px at 16
+      rrect(ctx, m, m, w, h, cfg.radius);
+      ctx.fillStyle = cfg.calendarFill;
       ctx.fill();
-      ctx.strokeStyle = cfg.outlineColor;
-      ctx.lineWidth = bw;
+      ctx.strokeStyle = cfg.calendarStroke;
+      ctx.lineWidth = stroke;
       ctx.lineJoin = "round";
       ctx.stroke();
 
-      // seam line (top divider)
-      const top = m + bw / 2;
-      const seamY = m + (S - 2 * m) * 0.34;
-      ctx.beginPath();
-      ctx.moveTo(m + bw, seamY);
-      ctx.lineTo(S - m - bw, seamY);
-      ctx.stroke();
+      // 3) Optional binder posts (but NO inner seam line)
+      if (cfg.showPosts) {
+        ctx.fillStyle = cfg.calendarStroke;
+        const postR = Math.max(2, Math.round(S / 28));
+        const y = m + postR + stroke * 0.4;
+        const leftX = m + w * 0.33;
+        const rightX = m + w * 0.67;
+        ctx.beginPath();
+        ctx.arc(leftX, y, postR, 0, Math.PI * 2);
+        ctx.arc(rightX, y, postR, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-      // binder posts
-      const postR = Math.max(2, Math.round(S / 28));
-      const postY = top + postR + 0.5;
-      const leftX = m + (S - 2 * m) * 0.33;
-      const rightX = m + (S - 2 * m) * 0.67;
-      ctx.fillStyle = cfg.outlineColor;
-      ctx.beginPath();
-      ctx.arc(leftX, postY, postR, 0, Math.PI * 2);
-      ctx.arc(rightX, postY, postR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // day number (blue), centered under seam
-      const str = String(day);
-      const maxTextWidth = (S - 2 * m) * 0.76;
-      const fs = fitFont(ctx, str, S, maxTextWidth);
-      ctx.font = `900 ${Math.round(fs)}px ${cfg.fontFamily}`;
+      // 4) Day number (brand blue) centered inside the square
+      const innerW = w - stroke * 2 - Math.round(S * 0.08);
+      const text = String(day);
+      const fontSize = fitFont(ctx, text, innerW, S);
+      ctx.font = `900 ${Math.round(fontSize)}px ${cfg.fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = cfg.numberColor;
 
-      // slight shadow so the blue stays visible at 16px
-      ctx.shadowColor = "rgba(0,0,0,0.12)";
+      // subtle glow so it stays readable at 16px
+      ctx.shadowColor = "rgba(0,0,0,0.10)";
       ctx.shadowBlur = S * 0.015;
 
-      const textY = (seamY + (S - m)) / 2; // centered in lower area
-      ctx.fillText(str, S / 2, textY);
+      ctx.fillText(text, m + w / 2, m + h / 2 + S * 0.02);
 
       return c.toDataURL("image/png");
     };
@@ -170,9 +183,7 @@ export default function DynamicFavicon(props: {
       });
 
     const setFavicons = (m: Map<number, string>) => {
-      document
-        .querySelectorAll(`link[rel~="icon"].${cfg.className}`)
-        .forEach((n) => n.remove());
+      document.querySelectorAll(`link[rel~="icon"].${cfg.className}`).forEach((n) => n.remove());
       for (const [sz, href] of m) {
         const l = document.createElement("link");
         l.rel = "icon";
@@ -201,19 +212,19 @@ export default function DynamicFavicon(props: {
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
-      document
-        .querySelectorAll(`link[rel~="icon"].${cfg.className}`)
-        .forEach((n) => n.remove());
+      document.querySelectorAll(`link[rel~="icon"].${cfg.className}`).forEach((n) => n.remove());
     };
   }, [
     props.timeZone,
     props.sizes?.join(","),
     props.baseSize,
     props.className,
-    props.outlineColor,
+    props.haloColor,
+    props.haloOpacity,
+    props.calendarFill,
+    props.calendarStroke,
     props.numberColor,
-    props.fillColor,
-    props.background,
+    props.showPosts,
     props.radius,
   ]);
 

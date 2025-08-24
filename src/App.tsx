@@ -22,10 +22,13 @@ const App = () => (
         </Routes>
         <DynamicFavicon
   timeZone="America/Chicago"
-  outlineColor="#2563EB"
+  haloColor="#2563EB"      // soft blue circle behind
+  haloOpacity={0.12}
+  calendarFill="#FFFFFF"
+  calendarStroke="#2563EB"
   numberColor="#2563EB"
-  fillColor="#FFFFFF"
-  radius={12} // or 18 if you want softer corners
+  showPosts={true}         // set false to remove binder posts
+  radius={14}
 />
 
       </BrowserRouter>

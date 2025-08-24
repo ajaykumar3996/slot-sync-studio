@@ -162,7 +162,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
             {/* <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Calendar className="h-5 w-5 text-primary" />
             </div> */}
-            <span className="text-gradient">Enter your details</span>
+            <span className="text-gradient">Enter the required details to book your slot</span>
           </DialogTitle>
         </DialogHeader>
         

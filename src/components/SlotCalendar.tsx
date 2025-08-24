@@ -34,7 +34,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
             Choose from available weekdays to view time slots
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex justify-center p-6">
           <Calendar
             mode="single"
             selected={selectedDate}
@@ -49,7 +49,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
               const isPast = compareDate < today;
               return isPast || isWeekend;
             }}
-            className="rounded-lg border-0 shadow-none w-full"
+            className="rounded-lg border-0 shadow-none w-full max-w-none"
             classNames={{
               months: "flex w-full flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
               month: "space-y-4 w-full flex flex-col",

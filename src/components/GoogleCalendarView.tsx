@@ -312,7 +312,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             </div>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Click any available button to book your appointment. All times shown are in <strong className="text-destructive">Central Standard Time (CST)</strong>.
+            Click any available button to book your appointment. All times shown are in <span className="text-destructive font-bold">Central Standard Time (CST)</span>.
           </p>
         </div>
       </CardContent>

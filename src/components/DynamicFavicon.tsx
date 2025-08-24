@@ -1,11 +1,18 @@
 import { useEffect } from "react";
 
-/** Darker tile + lighter day number */
+/** Minimal dynamic favicon: dark tile + light day number (no top bar) */
 export default function DynamicFavicon(props: {
   timeZone?: string;
-  sizes?: number[];
-  baseSize?: number;
+  sizes?: number[];     // 64/32/16 by default
+  baseSize?: number;    // internal render resolution
   className?: string;
+  // Optional overrides
+  bgTop?: string;       // darker blue for contrast
+  bgBottom?: string;    // deeper blue
+  dayA?: string;        // day number gradient start (lighter)
+  dayB?: string;        // day number gradient end (light)
+  outline?: string;     // subtle outline to keep number crisp at 16px
+  radius?: number;      // corner radius px at baseSize
 }) {
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -13,19 +20,17 @@ export default function DynamicFavicon(props: {
     const cfg = {
       timeZone: props.timeZone ?? "",
       sizes: props.sizes ?? [64, 32, 16],
-      baseSize: props.baseSize ?? 192,
+      baseSize: props.baseSize ?? 224,                 // high-res for crisper downscale
       className: props.className ?? "dynamic-favicon",
 
-      // ⬇️ Darker calendar tile
-      bgTop: "#9BB8FF",   // was very light; now darker
-      bgBottom: "#5C84FF",
-      topBar: "#FFFFFF",
-      ring: "#1E3A8A",    // deeper blue rings
+      // ⬇️ Brandy/darker tile + light number
+      bgTop: props.bgTop ?? "#6A86FF",
+      bgBottom: props.bgBottom ?? "#3057FF",
+      dayA: props.dayA ?? "#FFFFFF",
+      dayB: props.dayB ?? "#EDF4FF",
+      outline: props.outline ?? "rgba(0,0,0,0.18)",
+      radius: props.radius ?? 22,
 
-      // ⬇️ Lighter day number
-      dayFillA: "#FFFFFF",
-      dayFillB: "#EAF2FF",
-      stroke: "rgba(0,0,0,0.18)",  // subtle edge, not heavy
       fontFamily:
         "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
     };
@@ -38,9 +43,7 @@ export default function DynamicFavicon(props: {
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit", second: "2-digit",
         hour12: false,
-      }).formatToParts(now).reduce<Record<string, string>>((a, p) => {
-        a[p.type] = p.value; return a;
-      }, {});
+      }).formatToParts(now).reduce<Record<string,string>>((a,p)=>{a[p.type]=p.value;return a;}, {});
       return new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`);
     };
 
@@ -50,25 +53,29 @@ export default function DynamicFavicon(props: {
       return n.getTime() - d.getTime();
     };
 
-    const rr = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
-      const rad = Math.min(r, w/2, h/2);
+    const rrect = (
+      ctx: CanvasRenderingContext2D,
+      x: number, y: number, w: number, h: number, r: number
+    ) => {
+      const rr = Math.min(r, w/2, h/2);
       ctx.beginPath();
-      ctx.moveTo(x+rad, y);
-      ctx.arcTo(x+w, y, x+w, y+h, rad);
-      ctx.arcTo(x+w, y+h, x, y+h, rad);
-      ctx.arcTo(x, y+h, x, y, rad);
-      ctx.arcTo(x, y, x+w, y, rad);
+      ctx.moveTo(x+rr, y);
+      ctx.arcTo(x+w, y, x+w, y+h, rr);
+      ctx.arcTo(x+w, y+h, x, y+h, rr);
+      ctx.arcTo(x, y+h, x, y, rr);
+      ctx.arcTo(x, y, x+w, y, rr);
       ctx.closePath();
     };
 
     const fitFont = (ctx: CanvasRenderingContext2D, text: string, S: number) => {
-      let size = S * 0.66;
+      // Fill most of the tile since there’s no top bar now
+      let size = S * 0.74; // start big, shrink until fits
       while (true) {
         ctx.font = `900 ${Math.round(size)}px ${cfg.fontFamily}`;
         const w = ctx.measureText(text).width;
-        if (w <= S * 0.72) break;
-        size *= 0.96;
-        if (size < S * 0.44) break;
+        if (w <= S * 0.78) break;
+        size *= 0.97;
+        if (size < S * 0.46) break;
       }
       return size;
     };
@@ -79,42 +86,45 @@ export default function DynamicFavicon(props: {
       c.width = c.height = S;
       const ctx = c.getContext("2d")!;
 
-      // darker tile
+      // Darker blue rounded tile
       const g = ctx.createLinearGradient(0, 0, 0, S);
       g.addColorStop(0, cfg.bgTop);
       g.addColorStop(1, cfg.bgBottom);
       ctx.fillStyle = g;
-      rr(ctx, 6, 6, S - 12, S - 12, 22);
+      rrect(ctx, 10, 10, S - 20, S - 20, cfg.radius);
       ctx.fill();
 
-      // top bar (white)
-      ctx.fillStyle = cfg.topBar;
-      rr(ctx, 18, 18, S - 36, Math.round(S * 0.20), 12);
+      // Optional soft inner highlight to add depth
+      const inset = ctx.createRadialGradient(S*0.5, S*0.35, S*0.05, S*0.5, S*0.5, S*0.6);
+      inset.addColorStop(0, "rgba(255,255,255,0.15)");
+      inset.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = inset;
+      rrect(ctx, 10, 10, S - 20, S - 20, cfg.radius);
       ctx.fill();
 
-      // binder rings
-      ctx.fillStyle = cfg.ring;
-      ctx.beginPath(); ctx.arc(S * 0.40, 18, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(S * 0.60, 18, 5, 0, Math.PI * 2); ctx.fill();
-
-      // lighter day number
-      const text = String(day);
-      const fs = fitFont(ctx, text, S);
+      // Light day number centered
+      const str = String(day);
+      const fs = fitFont(ctx, str, S);
       ctx.font = `900 ${Math.round(fs)}px ${cfg.fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const grad = ctx.createLinearGradient(S*0.30, S*0.55, S*0.70, S*0.88);
-      grad.addColorStop(0, cfg.dayFillA);
-      grad.addColorStop(1, cfg.dayFillB);
-      ctx.fillStyle = grad;
 
-      // subtle outline for tiny sizes
+      const dg = ctx.createLinearGradient(S*0.35, S*0.45, S*0.65, S*0.85);
+      dg.addColorStop(0, cfg.dayA);
+      dg.addColorStop(1, cfg.dayB);
+      ctx.fillStyle = dg;
+
+      // Subtle outline + tiny glow so it stays readable at 16px
       ctx.lineJoin = "round";
-      ctx.strokeStyle = cfg.stroke;
-      ctx.lineWidth = Math.max(1, S / 22); // ~0.7–1px at 16
-      const y = S * 0.70;
-      ctx.strokeText(text, S/2, y);
-      ctx.fillText(text, S/2, y);
+      ctx.strokeStyle = cfg.outline;
+      ctx.lineWidth = Math.max(1, S / 24);    // ~0.7–1px at 16px
+      ctx.shadowColor = "rgba(0,0,0,0.18)";
+      ctx.shadowBlur = S * 0.02;
+
+      const y = S * 0.58;
+      ctx.strokeText(str, S/2, y);
+      ctx.shadowBlur = 0;
+      ctx.fillText(str, S/2, y);
 
       return c.toDataURL("image/png");
     };
@@ -159,7 +169,13 @@ export default function DynamicFavicon(props: {
       if (timer) clearTimeout(timer);
       document.querySelectorAll(`link[rel~="icon"].${cfg.className}`).forEach(n => n.remove());
     };
-  }, [props.timeZone, props.sizes?.join(","), props.baseSize, props.className]);
+  }, [
+    props.timeZone,
+    props.sizes?.join(","),
+    props.baseSize,
+    props.className,
+    props.bgTop, props.bgBottom, props.dayA, props.dayB, props.outline, props.radius
+  ]);
 
   return null;
 }

@@ -157,27 +157,40 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg max-w-[95vw] w-full">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Book Time Slot
+        <DialogHeader className="pb-4">
+          <DialogTitle className="flex items-center gap-3 text-xl">
+            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Calendar className="h-5 w-5 text-primary" />
+            </div>
+            <span className="text-gradient">Book Your Time Slot</span>
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
-          <div className="bg-muted p-4 rounded-lg space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4" />
-              <span>{slot.date.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })}</span>
+        <div className="space-y-6">
+          <div className="card-enhanced p-5 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Calendar className="h-4 w-4 text-primary" />
+              </div>
+              <span className="font-semibold text-foreground">
+                {slot.date.toLocaleDateString('en-US', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}
+              </span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4" />
-              <span>{slot.startTime} - {slot.endTime} CST ({slot.duration} minutes)</span>
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-accent/10 flex items-center justify-center">
+                <Clock className="h-4 w-4 text-accent" />
+              </div>
+              <span className="font-semibold text-foreground">
+                {slot.startTime} - {slot.endTime} 
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  CST ({slot.duration} minutes)
+                </span>
+              </span>
             </div>
           </div>
 
@@ -402,11 +415,20 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
               />
             </div>
 
-            <div className="flex gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+            <div className="flex gap-3 pt-6">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onClose} 
+                className="flex-1 h-12 font-medium"
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting} className="flex-1">
+              <Button 
+                type="submit" 
+                disabled={isSubmitting} 
+                className="flex-1 h-12 btn-gradient font-medium disabled:opacity-50"
+              >
                 {isSubmitting ? "Sending Request..." : "Request Booking"}
               </Button>
             </div>

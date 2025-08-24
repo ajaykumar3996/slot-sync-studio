@@ -151,26 +151,45 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
   const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6; // Sunday = 0, Saturday = 6
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="h-5 w-5" />
-          {selectedDate.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}
+    <Card className="card-enhanced animate-scale-in w-full">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-3 text-xl">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Clock className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-gradient">
+              {selectedDate.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {selectedDate.getFullYear()}
+            </span>
+          </div>
         </CardTitle>
         {loading && (
-          <p className="text-sm text-muted-foreground">Loading calendar...</p>
+          <div className="flex items-center gap-2 mt-2">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+            <p className="text-sm text-muted-foreground">Loading available slots...</p>
+          </div>
         )}
       </CardHeader>
       <CardContent>
         {isWeekend && (
-          <div className="mb-4 p-3 bg-muted/50 border border-border rounded-lg">
-            <p className="text-sm text-muted-foreground text-center">
-              🏖️ Weekend - Office is closed on {selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}s
+          <div className="mb-6 p-4 bg-muted/50 border border-border rounded-xl text-center">
+            <div className="h-12 w-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+              <svg className="h-6 w-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-muted-foreground">
+              Weekend - Office is closed on {selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}s
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Please select a weekday to view available time slots
             </p>
           </div>
         )}
@@ -196,14 +215,15 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     {!isWeekend && isSlotAvailable(hour, 0, 30) && canFit(hour, 0, 30) ? (
                       <Button 
                         size="sm" 
-                        variant="ghost" 
-                        className="text-xs h-6 px-2 bg-green-100 hover:bg-green-200 border border-green-300 text-green-800"
+                        variant="secondary" 
+                        className="text-xs h-6 px-3 bg-success/10 hover:bg-success/20 border border-success/30 text-success font-medium transition-all hover:scale-105 hover:shadow-sm"
                         onClick={() => handleSlotClick(hour, 0, 30)}
                       >
-                        Book 30m
+                        <Plus className="h-3 w-3 mr-1" />
+                        30min
                       </Button>
                     ) : !isWeekend ? (
-                      <div className="text-xs text-muted-foreground/50">Busy</div>
+                      <div className="text-xs text-muted-foreground/50 font-medium">Busy</div>
                     ) : null}
                   </div>
                   
@@ -213,28 +233,29 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
                         <Button 
                           size="sm" 
-                          variant="ghost" 
-                          className="text-xs h-6 px-2 bg-green-100 hover:bg-green-200 border border-green-300 text-green-800"
+                          variant="secondary" 
+                          className="text-xs h-6 px-3 bg-success/10 hover:bg-success/20 border border-success/30 text-success font-medium transition-all hover:scale-105 hover:shadow-sm"
                           onClick={() => handleSlotClick(hour, 30, 30)}
                         >
-                          Book 30m
+                          <Plus className="h-3 w-3 mr-1" />
+                          30min
                         </Button>
                       ) : !isWeekend ? (
-                        <div className="text-xs text-muted-foreground/50">Busy</div>
+                        <div className="text-xs text-muted-foreground/50 font-medium">Busy</div>
                       ) : null}
                     </div>
                   )}
                   
                   {/* 1-hour slot button from :00 (positioned on the right) */}
                   {!isWeekend && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
-                    <div className="absolute inset-0 flex items-center justify-end pr-2 z-20 pointer-events-none">
+                    <div className="absolute inset-0 flex items-center justify-end pr-3 z-20 pointer-events-none">
                       <Button 
                         size="sm" 
-                        variant="outline" 
-                        className="text-xs h-10 px-4 bg-green-50 hover:bg-green-100 border-green-400 text-green-800 pointer-events-auto"
+                        className="text-xs h-10 px-4 btn-gradient text-primary-foreground font-medium pointer-events-auto shadow-lg"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
-                        Book 1hr
+                        <Plus className="h-3 w-3 mr-1" />
+                        1 Hour
                       </Button>
                     </div>
                   )}
@@ -242,14 +263,14 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   {/* 1-hour slot button from :30 (positioned centered across hour boundary) */}
                   {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
                     <div className="absolute inset-0 z-30 pointer-events-none">
-                      <div className="absolute top-8 left-2 h-16 flex items-center pointer-events-auto">
+                      <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
-                          variant="outline" 
-                          className="text-xs h-10 px-4 bg-green-50 hover:bg-green-100 border-green-400 text-green-800"
+                          className="text-xs h-10 px-4 btn-gradient text-primary-foreground font-medium shadow-lg"
                           onClick={() => handleSlotClick(hour, 30, 60)}
                         >
-                          Book 1hr
+                          <Plus className="h-3 w-3 mr-1" />
+                          1 Hour
                         </Button>
                       </div>
                     </div>
@@ -282,20 +303,24 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           </div>
         </div>
         
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <div className="mt-6 p-4 bg-muted/30 rounded-xl border border-border/50">
+          <div className="flex items-center gap-6 text-sm text-muted-foreground mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-destructive rounded"></div>
-              <span>Busy events</span>
+              <div className="w-4 h-4 bg-destructive rounded-md shadow-sm"></div>
+              <span className="font-medium">Busy Time</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-2 bg-green-100 border border-green-300 rounded"></div>
-              <span>Available slots</span>
+              <div className="w-4 h-3 bg-success/10 border border-success/30 rounded-md"></div>
+              <span className="font-medium">30min Slots</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-3 rounded-md" style={{ background: 'var(--gradient-primary)' }}></div>
+              <span className="font-medium">1hr Slots</span>
             </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Click on the available time slot buttons to book appointments. 30-minute slots are always visible, 1-hour slots appear on the right (:00 start) or at the bottom left of the 30-minute mark (:30 start) when available.
-          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Click any available button to book your appointment. All times shown are in <strong>Central Standard Time (CST)</strong>.
+          </p>
         </div>
       </CardContent>
     </Card>

@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 
-/** High-contrast dynamic calendar favicon */
+/** Darker tile + lighter day number */
 export default function DynamicFavicon(props: {
   timeZone?: string;
-  sizes?: number[];     // output sizes
-  baseSize?: number;    // internal render res (bigger -> crisper)
+  sizes?: number[];
+  baseSize?: number;
   className?: string;
 }) {
   useEffect(() => {
@@ -13,17 +13,19 @@ export default function DynamicFavicon(props: {
     const cfg = {
       timeZone: props.timeZone ?? "",
       sizes: props.sizes ?? [64, 32, 16],
-      baseSize: props.baseSize ?? 192,               // ↑ crisper
+      baseSize: props.baseSize ?? 192,
       className: props.className ?? "dynamic-favicon",
 
-      // Darker, higher-contrast palette
-      bgTop: "#D6E2FF",
-      bgBottom: "#A7C0FF",
+      // ⬇️ Darker calendar tile
+      bgTop: "#9BB8FF",   // was very light; now darker
+      bgBottom: "#5C84FF",
       topBar: "#FFFFFF",
-      ring: "#1D4ED8",                                // blue-700
-      textFallback: "#0B2A6F",
-      textGradA: "#1E3A8A",                           // blue-800
-      textGradB: "#2563EB",                           // blue-600
+      ring: "#1E3A8A",    // deeper blue rings
+
+      // ⬇️ Lighter day number
+      dayFillA: "#FFFFFF",
+      dayFillB: "#EAF2FF",
+      stroke: "rgba(0,0,0,0.18)",  // subtle edge, not heavy
       fontFamily:
         "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
     };
@@ -60,8 +62,7 @@ export default function DynamicFavicon(props: {
     };
 
     const fitFont = (ctx: CanvasRenderingContext2D, text: string, S: number) => {
-      // Try big, shrink until width fits 72% of tile
-      let size = S * 0.66; // start larger than needed
+      let size = S * 0.66;
       while (true) {
         ctx.font = `900 ${Math.round(size)}px ${cfg.fontFamily}`;
         const w = ctx.measureText(text).width;
@@ -72,13 +73,13 @@ export default function DynamicFavicon(props: {
       return size;
     };
 
-    const makeIconPng = (day: number): string => {
+    const makeIcon = (day: number): string => {
       const S = cfg.baseSize;
       const c = document.createElement("canvas");
       c.width = c.height = S;
       const ctx = c.getContext("2d")!;
 
-      // Card background (darker)
+      // darker tile
       const g = ctx.createLinearGradient(0, 0, 0, S);
       g.addColorStop(0, cfg.bgTop);
       g.addColorStop(1, cfg.bgBottom);
@@ -86,58 +87,50 @@ export default function DynamicFavicon(props: {
       rr(ctx, 6, 6, S - 12, S - 12, 22);
       ctx.fill();
 
-      // Slimmer top bar to free vertical space
+      // top bar (white)
       ctx.fillStyle = cfg.topBar;
       rr(ctx, 18, 18, S - 36, Math.round(S * 0.20), 12);
       ctx.fill();
 
-      // Binder rings (slightly smaller)
+      // binder rings
       ctx.fillStyle = cfg.ring;
       ctx.beginPath(); ctx.arc(S * 0.40, 18, 5, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(S * 0.60, 18, 5, 0, Math.PI * 2); ctx.fill();
 
-      // Day number — bigger + darker + outlined
+      // lighter day number
       const text = String(day);
-      const fontSize = fitFont(ctx, text, S);
-      ctx.font = `900 ${Math.round(fontSize)}px ${cfg.fontFamily}`;
+      const fs = fitFont(ctx, text, S);
+      ctx.font = `900 ${Math.round(fs)}px ${cfg.fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-
-      const grad = ctx.createLinearGradient(S * 0.30, S * 0.55, S * 0.70, S * 0.88);
-      grad.addColorStop(0, cfg.textGradA);
-      grad.addColorStop(1, cfg.textGradB);
+      const grad = ctx.createLinearGradient(S*0.30, S*0.55, S*0.70, S*0.88);
+      grad.addColorStop(0, cfg.dayFillA);
+      grad.addColorStop(1, cfg.dayFillB);
       ctx.fillStyle = grad;
 
-      // Strong stroke for small favicons (scales down)
+      // subtle outline for tiny sizes
       ctx.lineJoin = "round";
-      ctx.strokeStyle = "rgba(0,0,0,0.28)";
-      ctx.lineWidth = Math.max(1, S / 18);          // ~1px at 16x16
+      ctx.strokeStyle = cfg.stroke;
+      ctx.lineWidth = Math.max(1, S / 22); // ~0.7–1px at 16
       const y = S * 0.70;
-
-      // Subtle shadow for extra contrast when downscaled
-      ctx.shadowColor = "rgba(0,0,0,0.20)";
-      ctx.shadowBlur = S * 0.02;
-
-      ctx.strokeText(text, S / 2, y);
-      ctx.shadowBlur = 0;
-      ctx.fillText(text, S / 2, y);
+      ctx.strokeText(text, S/2, y);
+      ctx.fillText(text, S/2, y);
 
       return c.toDataURL("image/png");
     };
 
-    const scale = (dataUrl: string, size: number) =>
-      new Promise<string>((res) => {
-        const img = new Image();
-        img.onload = () => {
-          const c = document.createElement("canvas");
-          c.width = c.height = size;
-          c.getContext("2d")!.drawImage(img, 0, 0, size, size);
-          res(c.toDataURL("image/png"));
-        };
-        img.src = dataUrl;
-      });
+    const scale = (src: string, size: number) => new Promise<string>((res) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = c.height = size;
+        c.getContext("2d")!.drawImage(img, 0, 0, size, size);
+        res(c.toDataURL("image/png"));
+      };
+      img.src = src;
+    });
 
-    const setFavicons = (m: Map<number, string>) => {
+    const setFavicons = (m: Map<number,string>) => {
       document.querySelectorAll(`link[rel~="icon"].${cfg.className}`).forEach(n => n.remove());
       for (const [sz, href] of m) {
         const l = document.createElement("link");
@@ -150,8 +143,7 @@ export default function DynamicFavicon(props: {
     let timer: number | undefined;
 
     const render = async () => {
-      const d = inTzDate(cfg.timeZone);
-      const hi = makeIconPng(d.getDate());
+      const hi = makeIcon(inTzDate(cfg.timeZone).getDate());
       const urls = await Promise.all(cfg.sizes.map(s => scale(hi, s)));
       if (!cancelled) setFavicons(new Map(urls.map((u, i) => [cfg.sizes[i], u])));
     };
@@ -159,7 +151,7 @@ export default function DynamicFavicon(props: {
     render().catch(console.error);
     timer = window.setTimeout(function tick() {
       render().catch(console.error);
-      timer = window.setTimeout(tick, 24 * 60 * 60 * 1000);
+      timer = window.setTimeout(tick, 24*60*60*1000);
     }, msUntilNextMidnight(cfg.timeZone));
 
     return () => {

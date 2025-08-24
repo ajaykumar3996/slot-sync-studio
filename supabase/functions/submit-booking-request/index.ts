@@ -133,33 +133,19 @@ const extractResumeText = async (
 };
 
 const serve_handler = async (req: Request): Promise<Response> => {
-  // Security: Validate origin
-  const origin = req.headers.get('origin');
-  const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
-  const finalCorsHeaders = {
-    ...corsHeaders,
-    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : allowedOrigins[0]
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   };
 
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: finalCorsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
-
-  // Security: Log request details for monitoring
-  console.log('🔍 Security check - Origin:', origin, 'Allowed:', isAllowedOrigin);
 
   try {
     // Parse and validate the incoming booking request
     const bookingData: BookingRequest = await req.json();
     console.log('Received booking request from:', bookingData.user_email);
-
-    if (!isAllowedOrigin) {
-      console.error('Blocked request from unauthorized origin:', origin);
-      return new Response(JSON.stringify({ error: 'Unauthorized origin' }), {
-        status: 403,
-        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
     // Security: Validate and sanitize input data
     if (!bookingData.user_name || !bookingData.user_email || !bookingData.phone_number) {
@@ -670,7 +656,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
         message: 'Booking request submitted successfully. You will receive a confirmation email once approved.' 
       }), 
       { 
-        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
 
@@ -683,7 +669,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
       }),
       {
         status: 500,
-        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }

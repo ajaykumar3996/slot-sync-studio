@@ -50,28 +50,18 @@ function logTime(label: string, date: Date) {
 }
 
 const serve_handler = async (req: Request): Promise<Response> => {
-  // Security: Validate origin
-  const origin = req.headers.get('origin');
-  const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
-  const finalCorsHeaders = {
-    ...corsHeaders,
-    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : allowedOrigins[0]
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   };
 
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: finalCorsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
-  // Security: Log request details for monitoring
-  console.log('🔍 Security check - Origin:', origin, 'Allowed:', isAllowedOrigin);
-
   try {
-    console.log('📍 Function called with origin:', origin);
-    console.log('📍 Is origin allowed:', isAllowedOrigin);
-    
     // Parse and validate request
     const requestBody = await req.json();
-    console.log('📍 Request body received:', requestBody);
     const { startDate, endDate, fetchEvents } = requestBody;
     
     // Input validation
@@ -79,27 +69,6 @@ const serve_handler = async (req: Request): Promise<Response> => {
       return new Response(JSON.stringify({ error: 'Missing required fields: startDate, endDate' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    // Validate date format (accept both YYYY-MM-DD and ISO formats)
-    const isValidDate = (dateStr: string) => {
-      const date = new Date(dateStr);
-      return !isNaN(date.getTime());
-    };
-    
-    if (!isValidDate(startDate) || !isValidDate(endDate)) {
-      return new Response(JSON.stringify({ error: 'Invalid date format' }), {
-        status: 400,
-        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!isAllowedOrigin) {
-      console.error('Blocked request from unauthorized origin:', origin);
-      return new Response(JSON.stringify({ error: 'Unauthorized origin' }), {
-        status: 403,
-        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -113,7 +82,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.error('❌ Missing Google Calendar credentials');
       return new Response(
         JSON.stringify({ error: 'Google Calendar API not configured' }),
-        { status: 500, headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -163,7 +132,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.log(`✅ Returning ${dayEvents.length} events for calendar view`);
       return new Response(
         JSON.stringify({ events: dayEvents }),
-        { headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -174,14 +143,14 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     return new Response(
       JSON.stringify({ slots: availableSlots }),
-      { headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('🔥 Error in fetch-calendar-slots function:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 };

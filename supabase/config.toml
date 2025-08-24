@@ -30,3 +30,6 @@ verify_jwt = false
 
 [functions.handle-booking-approval]
 verify_jwt = false
+
+[functions.create-upload-url]
+verify_jwt = false

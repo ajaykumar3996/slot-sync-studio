@@ -4,15 +4,15 @@ import { Resend } from "npm:resend@2.0.0";
 import JSZip from "npm:jszip@3.10.1";
 import { getDocument } from "npm:pdfjs-dist@4.0.379/legacy/build/pdf.mjs";
 
-// Security: Allowed origins for CORS
+// Security: Strict origin control
 const allowedOrigins = [
-  'https://517316ae-ebef-4cd9-90ed-2ae88547d989.sandbox.lovable.dev',
+  'https://localhost:3000',
   'http://localhost:3000',
-  'https://localhost:3000'
-];
+  process.env.SITE_URL,
+].filter(Boolean);
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // Will be set dynamically
+  'Access-Control-Allow-Origin': 'https://localhost:3000',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -132,24 +132,24 @@ const extractResumeText = async (
 };
 
 const serve_handler = async (req: Request): Promise<Response> => {
-  // Security: Validate origin
-  const origin = req.headers.get('origin');
-  const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
-  const finalCorsHeaders = {
-    ...corsHeaders,
-    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : allowedOrigins[0]
-  };
-
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: finalCorsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
-  // Security: Log request details for monitoring
-  console.log('🔍 Security check - Origin:', origin, 'Allowed:', isAllowedOrigin);
+  // Security: Strict origin enforcement
+  const origin = req.headers.get('origin');
+  if (!allowedOrigins.includes(origin)) {
+    console.error('Blocked request from unauthorized origin:', origin);
+    return new Response(JSON.stringify({ error: 'Unauthorized origin' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   try {
+    // Parse and validate the incoming booking request
     const bookingData: BookingRequest = await req.json();
-    console.log('Received booking request:', bookingData);
+    console.log('Received booking request from:', bookingData.user_email);
 
     // Security: Validate and sanitize input data
     if (!bookingData.user_name || !bookingData.user_email || !bookingData.phone_number) {

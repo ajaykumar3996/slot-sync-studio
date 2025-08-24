@@ -239,7 +239,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                             + 30min
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>
+                        <TooltipContent className="z-[60]">
                           <p>{formatTimeRange(hour, 0, 30)}</p>
                         </TooltipContent>
                       </Tooltip>
@@ -263,9 +263,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                                + 30min
                              </Button>
                            </TooltipTrigger>
-                           <TooltipContent>
-                             <p>{formatTimeRange(hour, 30, 30)}</p>
-                           </TooltipContent>
+                            <TooltipContent className="z-[60]">
+                              <p>{formatTimeRange(hour, 30, 30)}</p>
+                            </TooltipContent>
                          </Tooltip>
                        ) : !isWeekend ? (
                          <div className="text-xs text-muted-foreground/30 font-medium"></div>
@@ -288,9 +288,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                                1 Hour
                              </Button>
                            </TooltipTrigger>
-                           <TooltipContent>
-                             <p>{formatTimeRange(hour, 0, 60)}</p>
-                           </TooltipContent>
+                            <TooltipContent className="z-[60]">
+                              <p>{formatTimeRange(hour, 0, 60)}</p>
+                            </TooltipContent>
                          </Tooltip>
                        </div>
                      </div>
@@ -312,9 +312,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                                  1 Hour
                                </Button>
                              </TooltipTrigger>
-                             <TooltipContent>
-                               <p>{formatTimeRange(hour, 30, 60)}</p>
-                             </TooltipContent>
+                              <TooltipContent className="z-[60]">
+                                <p>{formatTimeRange(hour, 30, 60)}</p>
+                              </TooltipContent>
                            </Tooltip>
                          </div>
                        </div>

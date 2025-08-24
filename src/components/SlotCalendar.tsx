@@ -56,7 +56,7 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
               caption: "flex justify-center pt-1 relative items-center mb-4",
               caption_label: "text-lg font-medium",
               nav: "space-x-1 flex items-center",
-              nav_button: "h-8 w-8 bg-transparent p-0 opacity-50 hover:opacity-100 hover:bg-accent rounded-md transition-colors flex items-center justify-center",
+              nav_button: "h-10 w-10 bg-transparent p-0 opacity-50 hover:opacity-100 hover:bg-primary/20 hover:text-primary rounded-lg transition-colors flex items-center justify-center",
               nav_button_previous: "absolute left-1",
               nav_button_next: "absolute right-1",
               table: "w-full border-collapse",

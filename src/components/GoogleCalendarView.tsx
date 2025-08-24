@@ -193,259 +193,129 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             </p>
           </div>
         )}
-        <div className={`space-y-6 ${isWeekend ? 'opacity-50' : ''}`}>
-          {/* Modern Time Slot Cards */}
-          <div className="space-y-3">
-            {hours.map((hour) => {
-              if (hour === 18) return null; // Skip 6 PM
-              
-              const hourEvents = events.filter(event => 
-                event.startHour <= hour && event.endHour > hour
-              );
-              
-              return (
-                <div key={hour} className="bg-background border border-border rounded-xl p-4 hover:border-primary/20 transition-all duration-200">
-                  {/* Hour Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Clock className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-lg text-foreground">
-                          {convertTo12Hour(hour)}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {hour < 12 ? 'Morning' : 'Afternoon'} session
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* Availability Badge */}
-                    <div className="flex items-center gap-2">
-                      {hourEvents.length > 0 ? (
-                        <Badge variant="destructive" className="text-xs">
-                          Partially Busy
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs bg-success/10 text-success">
-                          Available
-                        </Badge>
-                      )}
-                    </div>
+        <div className={`relative ${isWeekend ? 'opacity-50' : ''}`}>
+          {/* Time Grid */}
+          <div className="border border-border rounded-lg overflow-hidden bg-background">
+            {hours.map((hour, index) => (
+              <div key={hour} className={`relative border-b border-border last:border-b-0 ${hour === 18 ? 'h-8' : 'h-16'}`}>
+                {/* Hour Label */}
+                <div className={`absolute left-0 top-0 w-16 ${hour === 18 ? 'h-8' : 'h-full'} flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30`}>
+                  {convertTo12Hour(hour)}
+                </div>
+                
+                {/* Time Slots with permanent booking buttons */}
+                <div className={`ml-16 relative ${hour === 18 ? 'h-8' : 'h-full'}`}>
+                  {/* 30-minute divider line - only show for non-6PM hours */}
+                  {hour < 18 && (
+                    <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/50 z-5"></div>
+                  )}
+                  
+                  {/* First 30-minute slot */}
+                  <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center z-10">
+                    {!isWeekend && isSlotAvailable(hour, 0, 30) && canFit(hour, 0, 30) ? (
+                      <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        className="text-xs h-6 px-3 bg-success hover:bg-success/90 text-success-foreground font-medium transition-all hover:scale-105 shadow-sm"
+                        onClick={() => handleSlotClick(hour, 0, 30)}
+                      >
+                        + 30min
+                      </Button>
+                    ) : !isWeekend ? (
+                      <div className="text-xs text-destructive/70 font-medium">Busy</div>
+                    ) : null}
                   </div>
                   
-                  {/* Time Slots Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {/* 30min slot at :00 */}
-                    {!isWeekend && (
-                      <div className={`group relative ${
-                        isSlotAvailable(hour, 0, 30) && canFit(hour, 0, 30)
-                          ? 'cursor-pointer'
-                          : 'cursor-not-allowed'
-                      }`}>
-                        <div 
-                          onClick={() => isSlotAvailable(hour, 0, 30) && canFit(hour, 0, 30) && handleSlotClick(hour, 0, 30)}
-                          className={`
-                            p-4 rounded-lg border-2 transition-all duration-200 
-                            ${isSlotAvailable(hour, 0, 30) && canFit(hour, 0, 30)
-                              ? 'border-success/30 bg-success/5 hover:bg-success/10 hover:border-success/50 hover:shadow-lg hover:-translate-y-1'
-                              : 'border-border/30 bg-muted/30 opacity-50'
-                            }
-                          `}
+                  {/* Second 30-minute slot - only show if not past 6:30 PM */}
+                  {hour < 18 && (
+                    <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
+                      {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
+                        <Button 
+                          size="sm" 
+                          variant="secondary" 
+                          className="text-xs h-6 px-3 bg-success hover:bg-success/90 text-success-foreground font-medium transition-all hover:scale-105 shadow-sm"
+                          onClick={() => handleSlotClick(hour, 30, 30)}
                         >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-sm text-foreground">
-                                {convertTo12Hour(hour)} - {convertTo12Hour(hour)}.30
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                30 minutes
-                              </p>
-                            </div>
-                            {isSlotAvailable(hour, 0, 30) && canFit(hour, 0, 30) ? (
-                              <div className="w-8 h-8 rounded-full bg-success flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Plus className="w-4 h-4 text-white" />
-                              </div>
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                                <Clock className="w-4 h-4 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* 30min slot at :30 */}
-                    {!isWeekend && (
-                      <div className={`group relative ${
-                        isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30)
-                          ? 'cursor-pointer'
-                          : 'cursor-not-allowed'
-                      }`}>
-                        <div 
-                          onClick={() => isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) && handleSlotClick(hour, 30, 30)}
-                          className={`
-                            p-4 rounded-lg border-2 transition-all duration-200 
-                            ${isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30)
-                              ? 'border-success/30 bg-success/5 hover:bg-success/10 hover:border-success/50 hover:shadow-lg hover:-translate-y-1'
-                              : 'border-border/30 bg-muted/30 opacity-50'
-                            }
-                          `}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-sm text-foreground">
-                                {convertTo12Hour(hour)}.30 - {convertTo12Hour(hour + 1)}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                30 minutes
-                              </p>
-                            </div>
-                            {isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
-                              <div className="w-8 h-8 rounded-full bg-success flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Plus className="w-4 h-4 text-white" />
-                              </div>
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                                <Clock className="w-4 h-4 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* 1 hour slot from :00 */}
-                    {!isWeekend && (
-                      <div className={`group relative ${
-                        isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60)
-                          ? 'cursor-pointer'
-                          : 'cursor-not-allowed'
-                      }`}>
-                        <div 
-                          onClick={() => isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && handleSlotClick(hour, 0, 60)}
-                          className={`
-                            p-4 rounded-lg border-2 transition-all duration-200 
-                            ${isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60)
-                              ? 'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 hover:shadow-lg hover:-translate-y-1'
-                              : 'border-border/30 bg-muted/30 opacity-50'
-                            }
-                          `}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-sm text-foreground">
-                                {convertTo12Hour(hour)} - {convertTo12Hour(hour + 1)}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                1 hour session
-                              </p>
-                            </div>
-                            {isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) ? (
-                              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Plus className="w-4 h-4 text-white" />
-                              </div>
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                                <Clock className="w-4 h-4 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* 1 hour slot from :30 */}
-                    {!isWeekend && (
-                      <div className={`group relative ${
-                        isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60)
-                          ? 'cursor-pointer'
-                          : 'cursor-not-allowed'
-                      }`}>
-                        <div 
-                          onClick={() => isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && handleSlotClick(hour, 30, 60)}
-                          className={`
-                            p-4 rounded-lg border-2 transition-all duration-200 
-                            ${isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60)
-                              ? 'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 hover:shadow-lg hover:-translate-y-1'
-                              : 'border-border/30 bg-muted/30 opacity-50'
-                            }
-                          `}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-sm text-foreground">
-                                {convertTo12Hour(hour)}.30 - {convertTo12Hour(hour + 1)}.30
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                1 hour session
-                              </p>
-                            </div>
-                            {isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) ? (
-                              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <Plus className="w-4 h-4 text-white" />
-                              </div>
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                                <Clock className="w-4 h-4 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Busy Events for this hour */}
-                  {hourEvents.length > 0 && (
-                    <div className="mt-4 p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-4 h-4 bg-destructive/20 rounded-full"></div>
-                        <p className="text-sm font-medium text-destructive">Busy periods</p>
-                      </div>
-                      {hourEvents.map((event, index) => (
-                        <p key={index} className="text-xs text-muted-foreground ml-6">
-                          {convertTo12Hour(event.startHour)}:{event.startMinute.toString().padStart(2, '0')} - {convertTo12Hour(event.endHour)}:{event.endMinute.toString().padStart(2, '0')}
-                        </p>
-                      ))}
+                          + 30min
+                        </Button>
+                      ) : !isWeekend ? (
+                        <div className="text-xs text-destructive/70 font-medium">Busy</div>
+                      ) : null}
                     </div>
                   )}
+                  
+                  {/* 1-hour slot button from :00 (positioned on the right) */}
+                  {!isWeekend && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
+                    <div className="absolute inset-0 flex items-center justify-end pr-3 z-20 pointer-events-none">
+                      <Button 
+                        size="sm" 
+                        className="text-xs h-10 px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-medium pointer-events-auto shadow-sm"
+                        onClick={() => handleSlotClick(hour, 0, 60)}
+                      >
+                        1 Hour
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* 1-hour slot button from :30 (positioned centered across hour boundary) */}
+                  {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
+                    <div className="absolute inset-0 z-30 pointer-events-none">
+                      <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
+                        <Button 
+                          size="sm" 
+                          className="text-xs h-10 px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-medium shadow-sm"
+                          onClick={() => handleSlotClick(hour, 30, 60)}
+                        >
+                          1 Hour
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {/* Events Overlay */}
+          <div className="absolute top-0 left-16 right-0 pointer-events-none">
+            {events.map((event) => {
+              const position = getEventPosition(event);
+              return (
+                <div
+                  key={event.id}
+                  className="absolute left-1 right-1 bg-destructive/90 text-destructive-foreground rounded-md px-2 py-1 text-xs font-medium shadow-sm border border-destructive/20 pointer-events-auto"
+                  style={{
+                    top: position.top,
+                    height: position.height,
+                    zIndex: position.zIndex
+                  }}
+                >
+                  <div className="flex items-center justify-center h-full">
+                    <span className="text-xs font-medium">Busy</span>
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
         
-        {/* Legend */}
-        <div className="mt-8 p-6 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-primary/10">
-          <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-              <Clock className="w-3 h-3 text-primary" />
+        <div className="mt-6 p-4 bg-muted/30 rounded-xl border border-border/50">
+          <div className="flex items-center gap-6 text-sm text-muted-foreground mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-destructive/90 rounded-md shadow-sm"></div>
+              <span className="font-medium">Busy Time</span>
             </div>
-            Booking Guide
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-success flex items-center justify-center">
-                <Plus className="w-3 h-3 text-white" />
-              </div>
-              <span className="text-muted-foreground">30-minute sessions</span>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-3 bg-success rounded-md"></div>
+              <span className="font-medium">30min Slots</span>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                <Plus className="w-3 h-3 text-white" />
-              </div>
-              <span className="text-muted-foreground">1-hour sessions</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-destructive/20"></div>
-              <span className="text-muted-foreground">Unavailable times</span>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-3 bg-primary rounded-md"></div>
+              <span className="font-medium">1hr Slots</span>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
-            All times are displayed in <strong>Central Standard Time (CST)</strong>. Click any available slot to book your appointment.
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Click any available button to book your appointment. All times shown are in <strong>Central Standard Time (CST)</strong>.
           </p>
         </div>
       </CardContent>

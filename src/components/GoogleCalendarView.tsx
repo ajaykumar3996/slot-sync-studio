@@ -216,7 +216,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <Button 
                         size="sm" 
                         variant="secondary" 
-                        className="text-xs h-6 px-3 bg-success hover:bg-success/90 text-success-foreground font-medium transition-all hover:scale-105 shadow-sm"
+                        className="text-xs h-6 px-3 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
                         onClick={() => handleSlotClick(hour, 0, 30)}
                       >
                         + 30min
@@ -233,7 +233,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                         <Button 
                           size="sm" 
                           variant="secondary" 
-                          className="text-xs h-6 px-3 bg-success hover:bg-success/90 text-success-foreground font-medium transition-all hover:scale-105 shadow-sm"
+                          className="text-xs h-6 px-3 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
                           onClick={() => handleSlotClick(hour, 30, 30)}
                         >
                           + 30min
@@ -249,7 +249,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     <div className="absolute inset-0 flex items-center justify-end pr-3 z-20 pointer-events-none">
                       <Button 
                         size="sm" 
-                        className="text-xs h-10 px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-medium pointer-events-auto shadow-sm"
+                        className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium pointer-events-auto shadow-sm"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
                         1 Hour
@@ -263,7 +263,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
-                          className="text-xs h-10 px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-medium shadow-sm"
+                          className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium shadow-sm"
                           onClick={() => handleSlotClick(hour, 30, 60)}
                         >
                           1 Hour
@@ -283,7 +283,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               return (
                 <div
                   key={event.id}
-                  className="absolute left-1 right-1 bg-destructive/90 text-destructive-foreground rounded-md px-2 py-1 text-xs font-medium shadow-sm border border-destructive/20 pointer-events-auto"
+                  className="absolute left-1 right-1 bg-destructive/20 text-destructive rounded-md px-2 py-1 text-xs font-medium border border-destructive/30 pointer-events-auto"
                   style={{
                     top: position.top,
                     height: position.height,
@@ -302,15 +302,15 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
         <div className="mt-6 p-4 bg-muted/30 rounded-xl border border-border/50">
           <div className="flex items-center gap-6 text-sm text-muted-foreground mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-destructive/90 rounded-md shadow-sm"></div>
+              <div className="w-4 h-4 bg-destructive/20 border border-destructive/30 rounded-md"></div>
               <span className="font-medium">Busy Time</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 bg-success rounded-md"></div>
+              <div className="w-4 h-3 bg-success/20 border border-success/30 rounded-md"></div>
               <span className="font-medium">30min Slots</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 bg-primary rounded-md"></div>
+              <div className="w-4 h-3 bg-primary/20 border border-primary/30 rounded-md"></div>
               <span className="font-medium">1hr Slots</span>
             </div>
           </div>

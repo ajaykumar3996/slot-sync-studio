@@ -321,7 +321,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
                   setResumeFile(file || null);
                 }}
                 required
-                className="w-full h-12 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+                className="w-full h-12 flex items-center border border-input rounded-md px-3 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80 cursor-pointer"
               />
               <p className="text-xs text-muted-foreground">Only PDF and DOCX files up to 10MB</p>
               {resumeFile && (

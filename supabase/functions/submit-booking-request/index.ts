@@ -4,8 +4,15 @@ import { Resend } from "npm:resend@2.0.0";
 import JSZip from "npm:jszip@3.10.1";
 import { getDocument } from "npm:pdfjs-dist@4.0.379/legacy/build/pdf.mjs";
 
+// Security: Allowed origins for CORS
+const allowedOrigins = [
+  'https://517316ae-ebef-4cd9-90ed-2ae88547d989.sandbox.lovable.dev',
+  'http://localhost:3000',
+  'https://localhost:3000'
+];
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': '*', // Will be set dynamically
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -125,13 +132,40 @@ const extractResumeText = async (
 };
 
 const serve_handler = async (req: Request): Promise<Response> => {
+  // Security: Validate origin
+  const origin = req.headers.get('origin');
+  const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
+  const finalCorsHeaders = {
+    ...corsHeaders,
+    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : allowedOrigins[0]
+  };
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: finalCorsHeaders });
   }
+
+  // Security: Log request details for monitoring
+  console.log('🔍 Security check - Origin:', origin, 'Allowed:', isAllowedOrigin);
 
   try {
     const bookingData: BookingRequest = await req.json();
     console.log('Received booking request:', bookingData);
+
+    // Security: Validate and sanitize input data
+    if (!bookingData.user_name || !bookingData.user_email || !bookingData.phone_number) {
+      throw new Error('Missing required fields: user_name, user_email, or phone_number');
+    }
+
+    // Security: Validate file paths to prevent path traversal
+    if (bookingData.resume_file_path && !bookingData.resume_file_path.match(/^resume-\d+-[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/)) {
+      console.error('Invalid resume file path format:', bookingData.resume_file_path);
+      throw new Error('Invalid resume file path format');
+    }
+
+    if (bookingData.payment_screenshot_path && !bookingData.payment_screenshot_path.match(/^payment-\d+-[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/)) {
+      console.error('Invalid payment screenshot path format:', bookingData.payment_screenshot_path);
+      throw new Error('Invalid payment screenshot path format');
+    }
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -626,7 +660,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
         message: 'Booking request submitted successfully. You will receive a confirmation email once approved.' 
       }), 
       { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } 
       }
     );
 
@@ -639,7 +673,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }

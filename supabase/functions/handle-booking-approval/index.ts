@@ -2,15 +2,40 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
 
+// Security: Allowed origins for CORS
+const allowedOrigins = [
+  'https://517316ae-ebef-4cd9-90ed-2ae88547d989.sandbox.lovable.dev',
+  'http://localhost:3000',
+  'https://localhost:3000'
+];
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': '*', // Will be set dynamically
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Security: HTML escape function to prevent XSS
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 const serve_handler = async (req: Request): Promise<Response> => {
+  // Security: Validate origin
+  const origin = req.headers.get('origin');
+  const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
+  const finalCorsHeaders = {
+    ...corsHeaders,
+    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : allowedOrigins[0]
+  };
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: finalCorsHeaders });
   }
 
   try {
@@ -42,11 +67,14 @@ const serve_handler = async (req: Request): Promise<Response> => {
       return new Response('Booking request not found or already processed', { status: 404 });
     }
 
-    // Update booking status
+    // Update booking status and invalidate approval token for security
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
     const { error: updateError } = await supabase
       .from('booking_requests')
-      .update({ status: newStatus })
+      .update({ 
+        status: newStatus,
+        approval_token: null // Security: Invalidate token after use
+      })
       .eq('id', bookingRequest.id);
 
     if (updateError) {
@@ -221,8 +249,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
             ${action === 'approve' ? '✅' : '❌'}
         </span>
         <h1>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</h1>
-        <p>The booking request for <strong>${bookingRequest.user_name}</strong> on <strong>${bookingRequest.slot_date} ${bookingRequest.slot_start_time}</strong> has been ${newStatus}.</p>
-        <p>A confirmation email has been sent to <strong>${bookingRequest.user_email}</strong>.</p>
+        <p>The booking request for <strong>${escapeHtml(bookingRequest.user_name)}</strong> on <strong>${escapeHtml(bookingRequest.slot_date)} ${escapeHtml(bookingRequest.slot_start_time)}</strong> has been ${newStatus}.</p>
+        <p>A confirmation email has been sent to <strong>${escapeHtml(bookingRequest.user_email)}</strong>.</p>
         <p class="close-note">You can safely close this tab.</p>
     </div>
 </body>
@@ -255,7 +283,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
 <body>
     <div class="error">
         <h2>Error</h2>
-        <p>An error occurred while processing the booking approval: ${error.message}</p>
+        <p>An error occurred while processing the booking approval: ${escapeHtml(error.message)}</p>
     </div>
 </body>
 </html>`;

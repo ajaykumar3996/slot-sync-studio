@@ -1,8 +1,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { parseISO, format, addMinutes, isWithinInterval, startOfDay } from "https://esm.sh/date-fns@3.6.0";
 
+// Security: Allowed origins for CORS
+const allowedOrigins = [
+  'https://517316ae-ebef-4cd9-90ed-2ae88547d989.sandbox.lovable.dev',
+  'http://localhost:3000',
+  'https://localhost:3000'
+];
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': '*', // Will be set dynamically
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -42,8 +49,16 @@ function logTime(label: string, date: Date) {
 }
 
 const serve_handler = async (req: Request): Promise<Response> => {
+  // Security: Validate origin
+  const origin = req.headers.get('origin');
+  const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
+  const finalCorsHeaders = {
+    ...corsHeaders,
+    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : allowedOrigins[0]
+  };
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: finalCorsHeaders });
   }
 
   try {
@@ -90,6 +105,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     // If fetchEvents is true, return the events for calendar view
     if (fetchEvents) {
       console.log('📅 Preparing events for calendar view...');
+      // Security: Sanitize event data to prevent sensitive information leakage
       const dayEvents = events.map(event => {
         const startTime = new Date(event.start.dateTime || event.start.date);
         const endTime = new Date(event.end.dateTime || event.end.date);
@@ -99,8 +115,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
         const endCST = new Date(endTime.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
         
         return {
-          id: event.id,
-          title: event.summary || 'Busy',
+          id: event.id.split('_')[0] || event.id, // Sanitize IDs
+          title: "Busy", // Hide actual event titles for privacy
           startTime: format(startCST, 'HH:mm'),
           endTime: format(endCST, 'HH:mm'),
           startHour: startCST.getHours(),
@@ -113,7 +129,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.log(`✅ Returning ${dayEvents.length} events for calendar view`);
       return new Response(
         JSON.stringify({ events: dayEvents }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -124,14 +140,14 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     return new Response(
       JSON.stringify({ slots: availableSlots }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('🔥 Error in fetch-calendar-slots function:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 };

@@ -22,10 +22,10 @@ const App = () => (
         </Routes>
         <DynamicFavicon
   timeZone="America/Chicago"
-  borderRadius={0}            // perfect square border
-  borderColor="#2563EB"       // outline blue
-  numberColor="#2563EB"       // blue “24”
-  fill="#FFFFFF"              // white inside
+  outlineColor="#2563EB"
+  numberColor="#2563EB"
+  fillColor="#FFFFFF"
+  radius={12} // or 18 if you want softer corners
 />
 
       </BrowserRouter>

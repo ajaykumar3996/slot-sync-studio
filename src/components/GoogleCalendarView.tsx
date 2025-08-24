@@ -311,8 +311,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               <span className="font-medium">Available Slots</span>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Click any available button to book your appointment. All times shown are in <span className="text-destructive font-bold">Central Standard Time (CST)</span>.
+          <p className="text-xs leading-relaxed">
+            <span className="text-muted-foreground">Click any available button to book your appointment. All times shown are in </span><span className="text-destructive font-bold">Central Standard Time (CST)</span><span className="text-muted-foreground">.</span>
           </p>
         </div>
       </CardContent>

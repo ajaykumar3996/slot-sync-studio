@@ -6,7 +6,12 @@
 All colors MUST be HSL.
 */
 
+
+
 @layer base {
+  #lovable-badge {
+    display: none !important;
+  }
   :root {
     /* Clean blue-focused design */
     --background: 0 0% 100%;

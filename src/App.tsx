@@ -20,7 +20,11 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-        <DynamicFavicon/>
+        <DynamicFavicon
+  timeZone="America/Chicago"
+  // tweak if your heading gradient uses different stops:
+  textGradient={["#4F7BFF", "#6DB6FF"]}
+/>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

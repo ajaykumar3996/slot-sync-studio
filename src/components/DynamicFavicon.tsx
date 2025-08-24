@@ -1,34 +1,37 @@
 import { useEffect } from "react";
 
 /**
- * Renders a calendar-style favicon that shows today's date and
- * auto-updates at midnight in the specified IANA timezone.
- *
- * Drop this component once in your app (e.g., Layout).
+ * Dynamic calendar favicon (brand-blue preset).
+ * - Matches blue gradient heading (text-gradient style)
+ * - Auto-updates at midnight in the chosen timezone
  */
 export default function DynamicFavicon(props: {
-  timeZone?: string;           // e.g., "America/Chicago"; empty/undefined => user's local tz
-  sizes?: number[];            // favicon sizes to generate
-  baseSize?: number;           // internal canvas render size before downscaling
-  bgTop?: string;              // gradient top color
-  bgBottom?: string;           // gradient bottom color
-  topBar?: string;             // header strip color
-  ring?: string;               // binder ring color
-  text?: string;               // day number color
-  className?: string;          // class placed on generated <link> tags
+  timeZone?: string;
+  sizes?: number[];
+  baseSize?: number;
+  // Brand colors (defaults tuned to your screenshots)
+  bgTop?: string;       // light blue top
+  bgBottom?: string;    // light blue bottom
+  topBar?: string;      // white bar
+  ring?: string;        // blue binder rings
+  text?: string;        // fallback solid text color
+  textGradient?: [string, string]; // gradient for the day number
+  className?: string;
 }) {
   useEffect(() => {
-    if (typeof document === "undefined") return; // SSR guard
+    if (typeof document === "undefined") return;
 
     const cfg = {
       timeZone: props.timeZone ?? "",
       sizes: props.sizes ?? [48, 32, 16],
       baseSize: props.baseSize ?? 128,
-      bgTop: props.bgTop ?? "#E9D7FE",
-      bgBottom: props.bgBottom ?? "#C7A4FF",
+      // --- Brand-blue defaults (edit if needed) ---
+      bgTop: props.bgTop ?? "#EEF4FF",
+      bgBottom: props.bgBottom ?? "#DAE6FF",
       topBar: props.topBar ?? "#FFFFFF",
-      ring: props.ring ?? "#6C47CE",
-      text: props.text ?? "#1D2266",
+      ring: props.ring ?? "#3B82F6",          // tailwind blue-500-ish
+      text: props.text ?? "#1E40AF",          // blue-800-ish (fallback)
+      textGradient: props.textGradient ?? ["#4F7BFF", "#6DB6FF"], // like your heading
       className: props.className ?? "dynamic-favicon",
       fontFamily:
         "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
@@ -52,7 +55,6 @@ export default function DynamicFavicon(props: {
           acc[p.type] = p.value;
           return acc;
         }, {});
-      // Construct a local Date from the parts representing the tz time
       return new Date(
         `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`
       );
@@ -89,35 +91,39 @@ export default function DynamicFavicon(props: {
       c.width = c.height = S;
       const ctx = c.getContext("2d")!;
 
-      // Background gradient
+      // Soft brand-blue card
       const g = ctx.createLinearGradient(0, 0, 0, S);
       g.addColorStop(0, cfg.bgTop);
       g.addColorStop(1, cfg.bgBottom);
       ctx.fillStyle = g;
-      roundedRect(ctx, 8, 8, S - 16, S - 16, 24);
+      roundedRect(ctx, 8, 8, S - 16, S - 16, 22);
       ctx.fill();
 
-      // Top bar
+      // White top bar (like your header glyph)
       ctx.fillStyle = cfg.topBar;
       roundedRect(ctx, 20, 20, S - 40, Math.round(S * 0.26), 12);
       ctx.fill();
 
-      // Binder rings
+      // Binder rings in blue
       ctx.fillStyle = cfg.ring;
-      ctx.beginPath();
-      ctx.arc(S * 0.38, 20, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(S * 0.62, 20, 6, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(S * 0.38, 20, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(S * 0.62, 20, 6, 0, Math.PI * 2); ctx.fill();
 
-      // Day number
-      ctx.fillStyle = cfg.text;
+      // Day number with gradient like your text-gradient
       const fontSize = Math.round(S * 0.48);
-      ctx.font = `bold ${fontSize}px ${cfg.fontFamily}`;
+      ctx.font = `800 ${fontSize}px ${cfg.fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(String(day), S / 2, S * 0.66);
+      const tg = ctx.createLinearGradient(S * 0.3, S * 0.5, S * 0.7, S * 0.85);
+      tg.addColorStop(0, cfg.textGradient[0]);
+      tg.addColorStop(1, cfg.textGradient[1]);
+      ctx.fillStyle = tg;
+      // Stroke for crisp edges when downscaled
+      ctx.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx.lineWidth = Math.max(1, S * 0.02);
+      const textY = S * 0.66;
+      ctx.strokeText(String(day), S / 2, textY);
+      ctx.fillText(String(day), S / 2, textY);
 
       return c.toDataURL("image/png");
     };
@@ -136,12 +142,9 @@ export default function DynamicFavicon(props: {
       });
 
     const setFavicons = (bySize: Map<number, string>) => {
-      // Remove previous icons created by this component
       document
         .querySelectorAll(`link[rel~="icon"].${cfg.className}`)
         .forEach((n) => n.parentElement?.removeChild(n));
-
-      // Add new icons
       for (const [sz, url] of bySize) {
         const link = document.createElement("link");
         link.setAttribute("rel", "icon");
@@ -160,8 +163,7 @@ export default function DynamicFavicon(props: {
       const day = d.getDate();
       const hi = makeIconPng(day);
       const urls = await Promise.all(cfg.sizes.map((s) => scaleDataUrl(hi, s)));
-      if (cancelled) return;
-      setFavicons(new Map(urls.map((u, i) => [cfg.sizes[i], u])));
+      if (!cancelled) setFavicons(new Map(urls.map((u, i) => [cfg.sizes[i], u])));
     };
 
     const schedule = () => {
@@ -182,7 +184,6 @@ export default function DynamicFavicon(props: {
         .querySelectorAll(`link[rel~="icon"].${cfg.className}`)
         .forEach((n) => n.parentElement?.removeChild(n));
     };
-    // Re-render if any styling/timezone props change
   }, [
     props.timeZone,
     props.sizes?.join(","),
@@ -192,8 +193,9 @@ export default function DynamicFavicon(props: {
     props.topBar,
     props.ring,
     props.text,
+    props.textGradient?.join(","),
     props.className,
   ]);
 
-  return null; // purely side-effect component
+  return null;
 }

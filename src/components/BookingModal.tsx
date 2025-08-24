@@ -325,7 +325,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer file:cursor-pointer"
                 />
                 <div className="flex items-center pointer-events-none">
-                  <div className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-semibold mr-3">
+                  <div className="px-4 py-2 btn-gradient text-primary-foreground rounded-full text-sm font-semibold mr-3">
                     Choose File
                   </div>
                   <span className="text-sm text-muted-foreground">
@@ -378,7 +378,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer file:cursor-pointer"
                 />
                 <div className="flex items-center pointer-events-none">
-                  <div className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-semibold mr-3">
+                  <div className="px-4 py-2 btn-gradient text-primary-foreground rounded-full text-sm font-semibold mr-3">
                     Choose File
                   </div>
                   <span className="text-sm text-muted-foreground">

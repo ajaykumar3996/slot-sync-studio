@@ -38,7 +38,14 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
           <Calendar
             mode="single"
             selected={selectedDate}
-            onSelect={setSelectedDate}
+            onSelect={(date) => {
+              // If clicking the same date, deselect it
+              if (selectedDate && date && selectedDate.toDateString() === date.toDateString()) {
+                setSelectedDate(undefined);
+              } else {
+                setSelectedDate(date);
+              }
+            }}
             disabled={(date) => {
               // Disable past dates and weekends (Saturday = 6, Sunday = 0)
               const isWeekend = date.getDay() === 0 || date.getDay() === 6;

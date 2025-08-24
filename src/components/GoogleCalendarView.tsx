@@ -184,10 +184,12 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               {selectedDate.getFullYear()}
             </span>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
+        </CardTitle>
+        <div className="mt-3 p-3 bg-muted/30 rounded-lg border border-border/50">
+          <p className="text-sm text-muted-foreground text-center">
             Click on the available slots below in the green to book a slot
           </p>
-        </CardTitle>
+        </div>
         {loading && (
           <div className="flex items-center gap-2 mt-2">
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>

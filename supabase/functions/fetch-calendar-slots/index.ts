@@ -66,8 +66,12 @@ const serve_handler = async (req: Request): Promise<Response> => {
   console.log('🔍 Security check - Origin:', origin, 'Allowed:', isAllowedOrigin);
 
   try {
+    console.log('📍 Function called with origin:', origin);
+    console.log('📍 Is origin allowed:', isAllowedOrigin);
+    
     // Parse and validate request
     const requestBody = await req.json();
+    console.log('📍 Request body received:', requestBody);
     const { startDate, endDate, fetchEvents } = requestBody;
     
     // Input validation

@@ -222,7 +222,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                         + 30min
                       </Button>
                     ) : !isWeekend ? (
-                      <div className="text-xs text-destructive/70 font-medium">Busy</div>
+                      <div className="text-xs text-muted-foreground/30 font-medium"></div>
                     ) : null}
                   </div>
                   
@@ -239,7 +239,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                           + 30min
                         </Button>
                       ) : !isWeekend ? (
-                        <div className="text-xs text-destructive/70 font-medium">Busy</div>
+                        <div className="text-xs text-muted-foreground/30 font-medium"></div>
                       ) : null}
                     </div>
                   )}
@@ -306,10 +306,6 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-destructive/20 border border-destructive/30 rounded-md"></div>
               <span className="font-medium">Busy Time</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-3 bg-success/20 border border-success/30 rounded-md"></div>
-              <span className="font-medium">Available Slots</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-3 bg-success/20 border border-success/30 rounded-md"></div>

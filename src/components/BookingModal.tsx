@@ -159,10 +159,10 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
       <DialogContent className="sm:max-w-lg max-w-[95vw] w-full">
         <DialogHeader className="pb-4">
           <DialogTitle className="flex items-center gap-3 text-xl">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            {/* <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Calendar className="h-5 w-5 text-primary" />
-            </div>
-            <span className="text-gradient">Book Your Time Slot</span>
+            </div> */}
+            <span className="text-gradient">Enter your details</span>
           </DialogTitle>
         </DialogHeader>
         

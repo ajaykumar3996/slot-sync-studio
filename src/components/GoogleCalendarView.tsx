@@ -216,11 +216,10 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <Button 
                         size="sm" 
                         variant="secondary" 
-                        className="text-xs h-6 px-3 bg-success/10 hover:bg-success/20 border border-success/30 text-success font-medium transition-all hover:scale-105 hover:shadow-sm"
+                        className="text-xs h-6 px-3 bg-success hover:bg-success/90 text-success-foreground font-medium transition-all hover:scale-105 shadow-sm"
                         onClick={() => handleSlotClick(hour, 0, 30)}
                       >
-                        <Plus className="h-3 w-3 mr-1" />
-                        30min
+                        + 30min
                       </Button>
                     ) : !isWeekend ? (
                       <div className="text-xs text-muted-foreground/50 font-medium">Busy</div>
@@ -234,11 +233,10 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                         <Button 
                           size="sm" 
                           variant="secondary" 
-                          className="text-xs h-6 px-3 bg-success/10 hover:bg-success/20 border border-success/30 text-success font-medium transition-all hover:scale-105 hover:shadow-sm"
+                          className="text-xs h-6 px-3 bg-success hover:bg-success/90 text-success-foreground font-medium transition-all hover:scale-105 shadow-sm"
                           onClick={() => handleSlotClick(hour, 30, 30)}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
-                          30min
+                          + 30min
                         </Button>
                       ) : !isWeekend ? (
                         <div className="text-xs text-muted-foreground/50 font-medium">Busy</div>
@@ -251,10 +249,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     <div className="absolute inset-0 flex items-center justify-end pr-3 z-20 pointer-events-none">
                       <Button 
                         size="sm" 
-                        className="text-xs h-10 px-4 btn-gradient text-primary-foreground font-medium pointer-events-auto shadow-lg"
+                        className="text-xs h-10 px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-medium pointer-events-auto shadow-sm"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
-                        <Plus className="h-3 w-3 mr-1" />
                         1 Hour
                       </Button>
                     </div>
@@ -266,10 +263,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
-                          className="text-xs h-10 px-4 btn-gradient text-primary-foreground font-medium shadow-lg"
+                          className="text-xs h-10 px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-medium shadow-sm"
                           onClick={() => handleSlotClick(hour, 30, 60)}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
                           1 Hour
                         </Button>
                       </div>
@@ -287,7 +283,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               return (
                 <div
                   key={event.id}
-                  className="absolute left-1 right-1 bg-destructive text-destructive-foreground rounded-md px-2 py-1 text-xs font-medium shadow-lg border border-destructive/20 pointer-events-auto"
+                  className="absolute left-1 right-1 bg-background/60 text-muted-foreground rounded-md px-2 py-1 text-xs font-medium border border-border/30 backdrop-blur-sm opacity-80 pointer-events-auto"
                   style={{
                     top: position.top,
                     height: position.height,
@@ -295,7 +291,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   }}
                 >
                   <div className="flex items-center justify-center h-full">
-                    <span className="text-xs font-medium">Busy</span>
+                    <span className="text-xs font-medium opacity-70">Busy</span>
                   </div>
                 </div>
               );
@@ -306,15 +302,15 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
         <div className="mt-6 p-4 bg-muted/30 rounded-xl border border-border/50">
           <div className="flex items-center gap-6 text-sm text-muted-foreground mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-destructive rounded-md shadow-sm"></div>
+              <div className="w-4 h-4 bg-background/60 border border-border/30 rounded-md backdrop-blur-sm opacity-80"></div>
               <span className="font-medium">Busy Time</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 bg-success/10 border border-success/30 rounded-md"></div>
+              <div className="w-4 h-3 bg-success rounded-md"></div>
               <span className="font-medium">30min Slots</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded-md" style={{ background: 'var(--gradient-primary)' }}></div>
+              <div className="w-4 h-3 bg-primary rounded-md"></div>
               <span className="font-medium">1hr Slots</span>
             </div>
           </div>

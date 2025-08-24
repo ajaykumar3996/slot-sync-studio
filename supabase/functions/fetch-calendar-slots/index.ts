@@ -1,15 +1,16 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { parseISO, format, addMinutes, isWithinInterval, startOfDay } from "https://esm.sh/date-fns@3.6.0";
 
-// Security: Strict origin control
+// Security: Allowed origins for CORS
 const allowedOrigins = [
+  'https://517316ae-ebef-4cd9-90ed-2ae88547d989.sandbox.lovable.dev',
   'https://localhost:3000',
   'http://localhost:3000',
   process.env.SITE_URL,
 ].filter(Boolean);
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://localhost:3000',
+  'Access-Control-Allow-Origin': '*', // Will be set dynamically
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -49,19 +50,20 @@ function logTime(label: string, date: Date) {
 }
 
 const serve_handler = async (req: Request): Promise<Response> => {
+  // Security: Validate origin
+  const origin = req.headers.get('origin');
+  const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
+  const finalCorsHeaders = {
+    ...corsHeaders,
+    'Access-Control-Allow-Origin': isAllowedOrigin && origin ? origin : allowedOrigins[0]
+  };
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: finalCorsHeaders });
   }
 
-  // Security: Strict origin enforcement
-  const origin = req.headers.get('origin');
-  if (!allowedOrigins.includes(origin)) {
-    console.error('Blocked request from unauthorized origin:', origin);
-    return new Response(JSON.stringify({ error: 'Unauthorized origin' }), {
-      status: 403,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
+  // Security: Log request details for monitoring
+  console.log('🔍 Security check - Origin:', origin, 'Allowed:', isAllowedOrigin);
 
   try {
     // Parse and validate request
@@ -81,7 +83,15 @@ const serve_handler = async (req: Request): Promise<Response> => {
     if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
       return new Response(JSON.stringify({ error: 'Invalid date format. Use YYYY-MM-DD' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!isAllowedOrigin) {
+      console.error('Blocked request from unauthorized origin:', origin);
+      return new Response(JSON.stringify({ error: 'Unauthorized origin' }), {
+        status: 403,
+        headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -95,7 +105,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.error('❌ Missing Google Calendar credentials');
       return new Response(
         JSON.stringify({ error: 'Google Calendar API not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -145,7 +155,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.log(`✅ Returning ${dayEvents.length} events for calendar view`);
       return new Response(
         JSON.stringify({ events: dayEvents }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -156,14 +166,14 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     return new Response(
       JSON.stringify({ slots: availableSlots }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('🔥 Error in fetch-calendar-slots function:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 };

@@ -78,10 +78,14 @@ const serve_handler = async (req: Request): Promise<Response> => {
       });
     }
     
-    // Validate date format (YYYY-MM-DD)
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-      return new Response(JSON.stringify({ error: 'Invalid date format. Use YYYY-MM-DD' }), {
+    // Validate date format (accept both YYYY-MM-DD and ISO formats)
+    const isValidDate = (dateStr: string) => {
+      const date = new Date(dateStr);
+      return !isNaN(date.getTime());
+    };
+    
+    if (!isValidDate(startDate) || !isValidDate(endDate)) {
+      return new Response(JSON.stringify({ error: 'Invalid date format' }), {
         status: 400,
         headers: { ...finalCorsHeaders, 'Content-Type': 'application/json' },
       });

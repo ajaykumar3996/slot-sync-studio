@@ -249,7 +249,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
                       <Button 
                         size="sm" 
-                        className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium pointer-events-auto shadow-sm backdrop-blur-sm"
+                        className="text-xs h-10 px-4 bg-background border-2 border-primary/30 text-primary hover:bg-primary/10 font-medium pointer-events-auto shadow-lg"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
                         1 Hour
@@ -263,7 +263,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
-                          className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium shadow-sm backdrop-blur-sm"
+                          className="text-xs h-10 px-4 bg-background border-2 border-primary/30 text-primary hover:bg-primary/10 font-medium shadow-lg"
                           onClick={() => handleSlotClick(hour, 30, 60)}
                         >
                           1 Hour

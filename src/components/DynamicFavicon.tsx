@@ -1,21 +1,10 @@
 import { useEffect } from "react";
 
-/**
- * Dynamic calendar favicon (brand-blue preset).
- * - Matches blue gradient heading (text-gradient style)
- * - Auto-updates at midnight in the chosen timezone
- */
+/** High-contrast dynamic calendar favicon */
 export default function DynamicFavicon(props: {
   timeZone?: string;
-  sizes?: number[];
-  baseSize?: number;
-  // Brand colors (defaults tuned to your screenshots)
-  bgTop?: string;       // light blue top
-  bgBottom?: string;    // light blue bottom
-  topBar?: string;      // white bar
-  ring?: string;        // blue binder rings
-  text?: string;        // fallback solid text color
-  textGradient?: [string, string]; // gradient for the day number
+  sizes?: number[];     // output sizes
+  baseSize?: number;    // internal render res (bigger -> crisper)
   className?: string;
 }) {
   useEffect(() => {
@@ -23,16 +12,18 @@ export default function DynamicFavicon(props: {
 
     const cfg = {
       timeZone: props.timeZone ?? "",
-      sizes: props.sizes ?? [48, 32, 16],
-      baseSize: props.baseSize ?? 128,
-      // --- Brand-blue defaults (edit if needed) ---
-      bgTop: props.bgTop ?? "#EEF4FF",
-      bgBottom: props.bgBottom ?? "#DAE6FF",
-      topBar: props.topBar ?? "#FFFFFF",
-      ring: props.ring ?? "#3B82F6",          // tailwind blue-500-ish
-      text: props.text ?? "#1E40AF",          // blue-800-ish (fallback)
-      textGradient: props.textGradient ?? ["#4F7BFF", "#6DB6FF"], // like your heading
+      sizes: props.sizes ?? [64, 32, 16],
+      baseSize: props.baseSize ?? 192,               // ↑ crisper
       className: props.className ?? "dynamic-favicon",
+
+      // Darker, higher-contrast palette
+      bgTop: "#D6E2FF",
+      bgBottom: "#A7C0FF",
+      topBar: "#FFFFFF",
+      ring: "#1D4ED8",                                // blue-700
+      textFallback: "#0B2A6F",
+      textGradA: "#1E3A8A",                           // blue-800
+      textGradB: "#2563EB",                           // blue-600
       fontFamily:
         "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
     };
@@ -42,47 +33,43 @@ export default function DynamicFavicon(props: {
       const now = new Date();
       const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: tz,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
         hour12: false,
-      })
-        .formatToParts(now)
-        .reduce<Record<string, string>>((acc, p) => {
-          acc[p.type] = p.value;
-          return acc;
-        }, {});
-      return new Date(
-        `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`
-      );
+      }).formatToParts(now).reduce<Record<string, string>>((a, p) => {
+        a[p.type] = p.value; return a;
+      }, {});
+      return new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`);
     };
 
-    const msUntilNextMidnight = (tz: string): number => {
+    const msUntilNextMidnight = (tz: string) => {
       const d = inTzDate(tz);
-      const next = new Date(d);
-      next.setHours(24, 0, 0, 0);
-      return next.getTime() - d.getTime();
+      const n = new Date(d); n.setHours(24,0,0,0);
+      return n.getTime() - d.getTime();
     };
 
-    const roundedRect = (
-      ctx: CanvasRenderingContext2D,
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      r: number
-    ) => {
-      const rr = Math.min(r, w / 2, h / 2);
+    const rr = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+      const rad = Math.min(r, w/2, h/2);
       ctx.beginPath();
-      ctx.moveTo(x + rr, y);
-      ctx.arcTo(x + w, y, x + w, y + h, rr);
-      ctx.arcTo(x + w, y + h, x, y + h, rr);
-      ctx.arcTo(x, y + h, x, y, rr);
-      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.moveTo(x+rad, y);
+      ctx.arcTo(x+w, y, x+w, y+h, rad);
+      ctx.arcTo(x+w, y+h, x, y+h, rad);
+      ctx.arcTo(x, y+h, x, y, rad);
+      ctx.arcTo(x, y, x+w, y, rad);
       ctx.closePath();
+    };
+
+    const fitFont = (ctx: CanvasRenderingContext2D, text: string, S: number) => {
+      // Try big, shrink until width fits 72% of tile
+      let size = S * 0.66; // start larger than needed
+      while (true) {
+        ctx.font = `900 ${Math.round(size)}px ${cfg.fontFamily}`;
+        const w = ctx.measureText(text).width;
+        if (w <= S * 0.72) break;
+        size *= 0.96;
+        if (size < S * 0.44) break;
+      }
+      return size;
     };
 
     const makeIconPng = (day: number): string => {
@@ -91,111 +78,96 @@ export default function DynamicFavicon(props: {
       c.width = c.height = S;
       const ctx = c.getContext("2d")!;
 
-      // Soft brand-blue card
+      // Card background (darker)
       const g = ctx.createLinearGradient(0, 0, 0, S);
       g.addColorStop(0, cfg.bgTop);
       g.addColorStop(1, cfg.bgBottom);
       ctx.fillStyle = g;
-      roundedRect(ctx, 8, 8, S - 16, S - 16, 22);
+      rr(ctx, 6, 6, S - 12, S - 12, 22);
       ctx.fill();
 
-      // White top bar (like your header glyph)
+      // Slimmer top bar to free vertical space
       ctx.fillStyle = cfg.topBar;
-      roundedRect(ctx, 20, 20, S - 40, Math.round(S * 0.26), 12);
+      rr(ctx, 18, 18, S - 36, Math.round(S * 0.20), 12);
       ctx.fill();
 
-      // Binder rings in blue
+      // Binder rings (slightly smaller)
       ctx.fillStyle = cfg.ring;
-      ctx.beginPath(); ctx.arc(S * 0.38, 20, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(S * 0.62, 20, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(S * 0.40, 18, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(S * 0.60, 18, 5, 0, Math.PI * 2); ctx.fill();
 
-      // Day number with gradient like your text-gradient
-      const fontSize = Math.round(S * 0.48);
-      ctx.font = `800 ${fontSize}px ${cfg.fontFamily}`;
+      // Day number — bigger + darker + outlined
+      const text = String(day);
+      const fontSize = fitFont(ctx, text, S);
+      ctx.font = `900 ${Math.round(fontSize)}px ${cfg.fontFamily}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const tg = ctx.createLinearGradient(S * 0.3, S * 0.5, S * 0.7, S * 0.85);
-      tg.addColorStop(0, cfg.textGradient[0]);
-      tg.addColorStop(1, cfg.textGradient[1]);
-      ctx.fillStyle = tg;
-      // Stroke for crisp edges when downscaled
-      ctx.strokeStyle = "rgba(0,0,0,0.08)";
-      ctx.lineWidth = Math.max(1, S * 0.02);
-      const textY = S * 0.66;
-      ctx.strokeText(String(day), S / 2, textY);
-      ctx.fillText(String(day), S / 2, textY);
+
+      const grad = ctx.createLinearGradient(S * 0.30, S * 0.55, S * 0.70, S * 0.88);
+      grad.addColorStop(0, cfg.textGradA);
+      grad.addColorStop(1, cfg.textGradB);
+      ctx.fillStyle = grad;
+
+      // Strong stroke for small favicons (scales down)
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(0,0,0,0.28)";
+      ctx.lineWidth = Math.max(1, S / 18);          // ~1px at 16x16
+      const y = S * 0.70;
+
+      // Subtle shadow for extra contrast when downscaled
+      ctx.shadowColor = "rgba(0,0,0,0.20)";
+      ctx.shadowBlur = S * 0.02;
+
+      ctx.strokeText(text, S / 2, y);
+      ctx.shadowBlur = 0;
+      ctx.fillText(text, S / 2, y);
 
       return c.toDataURL("image/png");
     };
 
-    const scaleDataUrl = (dataUrl: string, size: number): Promise<string> =>
-      new Promise((resolve) => {
+    const scale = (dataUrl: string, size: number) =>
+      new Promise<string>((res) => {
         const img = new Image();
         img.onload = () => {
           const c = document.createElement("canvas");
           c.width = c.height = size;
-          const ctx = c.getContext("2d")!;
-          ctx.drawImage(img, 0, 0, size, size);
-          resolve(c.toDataURL("image/png"));
+          c.getContext("2d")!.drawImage(img, 0, 0, size, size);
+          res(c.toDataURL("image/png"));
         };
         img.src = dataUrl;
       });
 
-    const setFavicons = (bySize: Map<number, string>) => {
-      document
-        .querySelectorAll(`link[rel~="icon"].${cfg.className}`)
-        .forEach((n) => n.parentElement?.removeChild(n));
-      for (const [sz, url] of bySize) {
-        const link = document.createElement("link");
-        link.setAttribute("rel", "icon");
-        link.setAttribute("sizes", `${sz}x${sz}`);
-        link.className = cfg.className;
-        link.href = url;
-        document.head.appendChild(link);
+    const setFavicons = (m: Map<number, string>) => {
+      document.querySelectorAll(`link[rel~="icon"].${cfg.className}`).forEach(n => n.remove());
+      for (const [sz, href] of m) {
+        const l = document.createElement("link");
+        l.rel = "icon"; l.sizes = `${sz}x${sz}`; l.href = href; l.className = cfg.className;
+        document.head.appendChild(l);
       }
     };
 
-    let timer: number | undefined;
     let cancelled = false;
+    let timer: number | undefined;
 
-    const renderAndApply = async () => {
+    const render = async () => {
       const d = inTzDate(cfg.timeZone);
-      const day = d.getDate();
-      const hi = makeIconPng(day);
-      const urls = await Promise.all(cfg.sizes.map((s) => scaleDataUrl(hi, s)));
+      const hi = makeIconPng(d.getDate());
+      const urls = await Promise.all(cfg.sizes.map(s => scale(hi, s)));
       if (!cancelled) setFavicons(new Map(urls.map((u, i) => [cfg.sizes[i], u])));
     };
 
-    const schedule = () => {
-      const delay = msUntilNextMidnight(cfg.timeZone);
-      timer = window.setTimeout(function tick() {
-        renderAndApply().catch(console.error);
-        timer = window.setTimeout(tick, 24 * 60 * 60 * 1000);
-      }, delay);
-    };
-
-    renderAndApply().catch(console.error);
-    schedule();
+    render().catch(console.error);
+    timer = window.setTimeout(function tick() {
+      render().catch(console.error);
+      timer = window.setTimeout(tick, 24 * 60 * 60 * 1000);
+    }, msUntilNextMidnight(cfg.timeZone));
 
     return () => {
       cancelled = true;
-      if (timer) window.clearTimeout(timer);
-      document
-        .querySelectorAll(`link[rel~="icon"].${cfg.className}`)
-        .forEach((n) => n.parentElement?.removeChild(n));
+      if (timer) clearTimeout(timer);
+      document.querySelectorAll(`link[rel~="icon"].${cfg.className}`).forEach(n => n.remove());
     };
-  }, [
-    props.timeZone,
-    props.sizes?.join(","),
-    props.baseSize,
-    props.bgTop,
-    props.bgBottom,
-    props.topBar,
-    props.ring,
-    props.text,
-    props.textGradient?.join(","),
-    props.className,
-  ]);
+  }, [props.timeZone, props.sizes?.join(","), props.baseSize, props.className]);
 
   return null;
 }

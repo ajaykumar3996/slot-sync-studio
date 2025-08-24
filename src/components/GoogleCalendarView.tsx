@@ -239,7 +239,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                             + 30min
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent className="z-[60]">
+                        <TooltipContent className="z-[100]">
                           <p>{formatTimeRange(hour, 0, 30)}</p>
                         </TooltipContent>
                       </Tooltip>
@@ -263,7 +263,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                                + 30min
                              </Button>
                            </TooltipTrigger>
-                            <TooltipContent className="z-[60]">
+                            <TooltipContent className="z-[100]">
                               <p>{formatTimeRange(hour, 30, 30)}</p>
                             </TooltipContent>
                          </Tooltip>
@@ -288,7 +288,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                                1 Hour
                              </Button>
                            </TooltipTrigger>
-                            <TooltipContent className="z-[60]">
+                            <TooltipContent className="z-[100]">
                               <p>{formatTimeRange(hour, 0, 60)}</p>
                             </TooltipContent>
                          </Tooltip>
@@ -312,7 +312,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                                  1 Hour
                                </Button>
                              </TooltipTrigger>
-                              <TooltipContent className="z-[60]">
+                              <TooltipContent className="z-[100]">
                                 <p>{formatTimeRange(hour, 30, 60)}</p>
                               </TooltipContent>
                            </Tooltip>

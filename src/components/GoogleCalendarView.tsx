@@ -247,13 +247,16 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   {/* 1-hour slot button from :00 (positioned on the right) */}
                   {!isWeekend && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
                     <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
-                      <Button 
-                        size="sm" 
-                        className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm"
-                        onClick={() => handleSlotClick(hour, 0, 60)}
-                      >
-                        1 Hour
-                      </Button>
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-background rounded-md"></div>
+                        <Button 
+                          size="sm" 
+                          className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm relative z-10"
+                          onClick={() => handleSlotClick(hour, 0, 60)}
+                        >
+                          1 Hour
+                        </Button>
+                      </div>
                     </div>
                   )}
                   
@@ -261,13 +264,16 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
                     <div className="absolute inset-0 z-40 pointer-events-none">
                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
-                        <Button 
-                          size="sm" 
-                          className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
-                          onClick={() => handleSlotClick(hour, 30, 60)}
-                        >
-                          1 Hour
-                        </Button>
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-background rounded-md"></div>
+                          <Button 
+                            size="sm" 
+                            className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm relative z-10"
+                            onClick={() => handleSlotClick(hour, 30, 60)}
+                          >
+                            1 Hour
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}

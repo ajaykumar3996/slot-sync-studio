@@ -184,6 +184,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               {selectedDate.getFullYear()}
             </span>
           </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            Click on the available slots below in the green to book a slot
+          </p>
         </CardTitle>
         {loading && (
           <div className="flex items-center gap-2 mt-2">
@@ -236,7 +239,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                             className="text-xs h-6 px-3 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
                             onClick={() => handleSlotClick(hour, 0, 30)}
                           >
-                            + 30min
+                            30min
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent className="z-[100]">
@@ -260,7 +263,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                                className="text-xs h-6 px-3 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
                                onClick={() => handleSlotClick(hour, 30, 30)}
                              >
-                               + 30min
+                               30min
                              </Button>
                            </TooltipTrigger>
                             <TooltipContent className="z-[100]">

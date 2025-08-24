@@ -49,6 +49,12 @@ const Index = () => {
         <SlotCalendar onSlotSelect={handleSlotSelect} />
         <BookingModal slot={selectedSlot} isOpen={isModalOpen} onClose={handleModalClose} />
       </div>
+      
+      <footer className="text-center py-6 border-t border-border/10">
+        <p className="text-sm text-muted-foreground">
+          Developed By <span className="font-semibold text-primary">Anand</span>
+        </p>
+      </footer>
     </div>
   );
 };

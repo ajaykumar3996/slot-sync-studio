@@ -22,15 +22,9 @@ const App = () => (
         </Routes>
         <DynamicFavicon
   timeZone="America/Chicago"
-  haloColor="#2563EB"      // soft blue circle behind
-  haloOpacity={0.12}
-  calendarFill="#FFFFFF"
-  calendarStroke="#2563EB"
-  numberColor="#2563EB"
-  showPosts={true}         // set false to remove binder posts
-  radius={14}
+  // tweak if your heading gradient uses different stops:
+  textGradient={["#4F7BFF", "#6DB6FF"]}
 />
-
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

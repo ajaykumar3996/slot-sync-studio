@@ -246,10 +246,10 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* 1-hour slot button from :00 (positioned on the right) */}
                   {!isWeekend && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
-                    <div className="absolute inset-0 flex items-center justify-end pr-3 z-20 pointer-events-none">
+                    <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
                       <Button 
                         size="sm" 
-                        className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium pointer-events-auto shadow-sm"
+                        className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium pointer-events-auto shadow-sm backdrop-blur-sm"
                         onClick={() => handleSlotClick(hour, 0, 60)}
                       >
                         1 Hour
@@ -259,11 +259,11 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                   
                   {/* 1-hour slot button from :30 (positioned centered across hour boundary) */}
                   {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
-                    <div className="absolute inset-0 z-30 pointer-events-none">
+                    <div className="absolute inset-0 z-40 pointer-events-none">
                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                         <Button 
                           size="sm" 
-                          className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium shadow-sm"
+                          className="text-xs h-10 px-4 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-medium shadow-sm backdrop-blur-sm"
                           onClick={() => handleSlotClick(hour, 30, 60)}
                         >
                           1 Hour
@@ -283,7 +283,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
               return (
                 <div
                   key={event.id}
-                  className="absolute left-1 right-1 bg-destructive/20 text-destructive rounded-md px-2 py-1 text-xs font-medium border border-destructive/30 pointer-events-auto"
+                  className="absolute left-1 right-1 bg-destructive/20 text-destructive rounded-md px-2 py-1 text-xs font-medium border border-destructive/30 pointer-events-auto z-30"
                   style={{
                     top: position.top,
                     height: position.height,

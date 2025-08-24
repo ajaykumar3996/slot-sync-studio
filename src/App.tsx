@@ -22,9 +22,12 @@ const App = () => (
         </Routes>
         <DynamicFavicon
   timeZone="America/Chicago"
-  // tweak if your heading gradient uses different stops:
-  textGradient={["#4F7BFF", "#6DB6FF"]}
+  borderRadius={0}            // perfect square border
+  borderColor="#2563EB"       // outline blue
+  numberColor="#2563EB"       // blue “24”
+  fill="#FFFFFF"              // white inside
 />
+
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

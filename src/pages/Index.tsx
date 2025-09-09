@@ -83,7 +83,7 @@ const Index = () => {
                   Clear All
                 </button>
               </div>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
+              <div className="space-y-2">
                 {selectedSlots.map((slot) => (
                   <div key={slot.id} className="text-xs p-2 bg-primary/10 rounded border">
                     <div className="font-medium">

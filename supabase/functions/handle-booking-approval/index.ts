@@ -67,6 +67,19 @@ const serve_handler = async (req: Request): Promise<Response> => {
       return new Response('Booking request not found or already processed', { status: 404 });
     }
 
+    // Fetch the associated booking slots
+    const { data: bookingSlots, error: slotsError } = await supabase
+      .from('booking_slots')
+      .select('*')
+      .eq('booking_request_id', bookingRequest.id)
+      .order('slot_date', { ascending: true })
+      .order('slot_start_time', { ascending: true });
+
+    if (slotsError || !bookingSlots || bookingSlots.length === 0) {
+      console.error('Booking slots not found:', slotsError);
+      return new Response('Booking slots not found', { status: 404 });
+    }
+
     // Update booking status and invalidate approval token for security
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
     const { error: updateError } = await supabase
@@ -88,7 +101,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     if (action === 'approve') {
       try {
         console.log('Creating automatic Google Calendar event...');
-        const calendarEvent = await createGoogleCalendarEvent(bookingRequest);
+        const calendarEvent = await createGoogleCalendarEvent(bookingRequest, bookingSlots);
         console.log('✅ Google Calendar event created automatically:', calendarEvent.id, calendarEvent.htmlLink);
       } catch (calendarError) {
         console.error('❌ Failed to create automatic Google Calendar event:', calendarError);
@@ -106,9 +119,10 @@ const serve_handler = async (req: Request): Promise<Response> => {
         const resend = new Resend(resendApiKey);
         
         const isApproved = action === 'approve';
+        const firstSlot = bookingSlots[0]; // Use first slot for email subject
         const subject = isApproved 
-          ? `Meeting Request Confirmed - ${bookingRequest.slot_date} ${bookingRequest.slot_start_time}`
-          : `Booking Request Declined - ${bookingRequest.slot_date}`;
+          ? `Meeting Request Confirmed - ${firstSlot.slot_date} ${firstSlot.slot_start_time}${bookingSlots.length > 1 ? ` (+${bookingSlots.length - 1} more)` : ''}`
+          : `Booking Request Declined - ${firstSlot.slot_date}`;
 
         console.log(`Sending ${isApproved ? 'approval' : 'rejection'} email to ${bookingRequest.user_email} using Resend`);
         
@@ -118,7 +132,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
             <p><strong>✅ Your meeting request has been confirmed!</strong></p>
             <p>Click the button below to add this appointment to your Google Calendar:</p>
             <div style="margin: 15px 0;">
-              <a href="${createGoogleCalendarEventUrl(bookingRequest)}" 
+              <a href="${createGoogleCalendarEventUrl(bookingRequest, bookingSlots)}" 
                  style="background: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;"
                  target="_blank">
                 📅 Add to Google Calendar
@@ -138,9 +152,15 @@ const serve_handler = async (req: Request): Promise<Response> => {
         const interviewInstructions = isApproved ? `
           <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
-            <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
-            <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
-            <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
+            <h3>Scheduled Slots (${bookingSlots.length} slot${bookingSlots.length > 1 ? 's' : ''})</h3>
+            ${bookingSlots.map((slot, index) => `
+              <div style="background: #e8f4f8; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #007bff;">
+                <p><strong>Slot ${index + 1}:</strong></p>
+                <p><strong>Date:</strong> ${slot.slot_date}</p>
+                <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} CST</p>
+                <p><strong>Duration:</strong> ${slot.slot_duration_minutes} minutes</p>
+              </div>
+            `).join('')}
             <h3 style="margin-top: 20px; color: #856404;">For Interviews (Please use windows laptop, faced multiple connection issues with mac earlier)</h3>
             <p><strong>Instructions:</strong></p>
             <p>Download chrome Remote Desktop application on your laptop - https://remotedesktop.google.com/access/</p>
@@ -156,9 +176,15 @@ const serve_handler = async (req: Request): Promise<Response> => {
         ` : `
           <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p><strong>Name:</strong> ${bookingRequest.user_name}</p>
-            <p><strong>Date:</strong> ${bookingRequest.slot_date}</p>
-            <p><strong>Time:</strong> ${bookingRequest.slot_start_time} - ${bookingRequest.slot_end_time} CST</p>
-            <p><strong>Duration:</strong> ${bookingRequest.slot_duration_minutes} minutes</p>
+            <h3>Declined Slots</h3>
+            ${bookingSlots.map((slot, index) => `
+              <div style="background: #f8e8e8; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #dc2626;">
+                <p><strong>Slot ${index + 1}:</strong></p>
+                <p><strong>Date:</strong> ${slot.slot_date}</p>
+                <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} CST</p>
+                <p><strong>Duration:</strong> ${slot.slot_duration_minutes} minutes</p>
+              </div>
+            `).join('')}
           </div>
         `;
 
@@ -249,7 +275,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
             ${action === 'approve' ? '✅' : '❌'}
         </span>
         <h1>Booking ${action === 'approve' ? 'Approved' : 'Rejected'}</h1>
-        <p>The booking request for <strong>${escapeHtml(bookingRequest.user_name)}</strong> on <strong>${escapeHtml(bookingRequest.slot_date)} ${escapeHtml(bookingRequest.slot_start_time)}</strong> has been ${newStatus}.</p>
+        <p>The booking request for <strong>${escapeHtml(bookingRequest.user_name)}</strong> with <strong>${bookingSlots.length} slot${bookingSlots.length > 1 ? 's' : ''}</strong> has been ${newStatus}.</p>
         <p>A confirmation email has been sent to <strong>${escapeHtml(bookingRequest.user_email)}</strong>.</p>
         <p class="close-note">You can safely close this tab.</p>
     </div>
@@ -296,7 +322,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
 };
 
 // Function to create Google Calendar event automatically
-async function createGoogleCalendarEvent(bookingRequest: any) {
+async function createGoogleCalendarEvent(bookingRequest: any, bookingSlots: any[]) {
   console.log('🔑 Getting Google credentials...');
   const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
   const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
@@ -312,10 +338,14 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
   const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
   console.log('✅ Access token obtained successfully');
   
+  // For now, create a calendar event for the first slot only
+  // TODO: Handle multiple slots - could create multiple events or combine them
+  const firstSlot = bookingSlots[0];
+  
   // Parse the booking date and time
-  const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
-  const startTime = bookingRequest.slot_start_time; // e.g., "08:00:00" (24-hour format from DB)
-  const endTime = bookingRequest.slot_end_time; // e.g., "08:30:00" (24-hour format from DB)
+  const eventDate = firstSlot.slot_date; // YYYY-MM-DD
+  const startTime = firstSlot.slot_start_time; // e.g., "08:00:00" (24-hour format from DB)
+  const endTime = firstSlot.slot_end_time; // e.g., "08:30:00" (24-hour format from DB)
   
   console.log('📅 Event details:', { eventDate, startTime, endTime });
   
@@ -327,8 +357,8 @@ async function createGoogleCalendarEvent(bookingRequest: any) {
   console.log('🕐 Converted times:', { startDateTime, endDateTime });
   
   const calendarEvent = {
-    summary: bookingRequest.user_name,
-    description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
+    summary: `${bookingRequest.user_name}${bookingSlots.length > 1 ? ` (${bookingSlots.length} slots)` : ''}`,
+    description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nTotal slots: ${bookingSlots.length}\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
     start: {
       dateTime: startDateTime,
       timeZone: 'America/Chicago'
@@ -514,10 +544,14 @@ function convertTo24HourFormat(timeStr: string): string {
 }
 
 // Helper function to create Google Calendar URL for manual addition (fallback)
-function createGoogleCalendarEventUrl(bookingRequest: any): string {
-  const eventDate = bookingRequest.slot_date; // YYYY-MM-DD
-  const startTime = bookingRequest.slot_start_time; // e.g., "08:00:00" (24-hour format from DB)
-  const endTime = bookingRequest.slot_end_time; // e.g., "08:30:00" (24-hour format from DB)
+function createGoogleCalendarEventUrl(bookingRequest: any, bookingSlots: any[]): string {
+  // For now, create calendar URL for the first slot only
+  // TODO: Handle multiple slots - could create multiple events or combine them
+  const firstSlot = bookingSlots[0];
+  
+  const eventDate = firstSlot.slot_date; // YYYY-MM-DD
+  const startTime = firstSlot.slot_start_time; // e.g., "08:00:00" (24-hour format from DB)
+  const endTime = firstSlot.slot_end_time; // e.g., "08:30:00" (24-hour format from DB)
   
   // Times are already in 24-hour format, just remove seconds
   const startTime24 = startTime.substring(0, 5); // "08:00:00" -> "08:00"
@@ -527,9 +561,9 @@ function createGoogleCalendarEventUrl(bookingRequest: any): string {
   const startDateTime = `${eventDate.replace(/-/g, '')}T${startTime24.replace(/:/g, '')}00`;
   const endDateTime = `${eventDate.replace(/-/g, '')}T${endTime24.replace(/:/g, '')}00`;
   
-  const eventTitle = encodeURIComponent(`Meeting with ${bookingRequest.user_name}`);
+  const eventTitle = encodeURIComponent(`Meeting with ${bookingRequest.user_name}${bookingSlots.length > 1 ? ` (${bookingSlots.length} slots)` : ''}`);
   const eventDescription = encodeURIComponent(
-    `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nMessage: ${bookingRequest.message || 'No message provided'}`
+    `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nTotal slots: ${bookingSlots.length}\n\nMessage: ${bookingRequest.message || 'No message provided'}`
   );
   
   // Create Google Calendar URL

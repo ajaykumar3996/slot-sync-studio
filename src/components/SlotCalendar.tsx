@@ -15,9 +15,10 @@ interface TimeSlot {
 
 interface SlotCalendarProps {
   onSlotSelect: (slot: TimeSlot) => void;
+  selectedSlots: TimeSlot[];
 }
 
-export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
+export function SlotCalendar({ onSlotSelect, selectedSlots }: SlotCalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date>();
 
   return (
@@ -86,7 +87,8 @@ export function SlotCalendar({ onSlotSelect }: SlotCalendarProps) {
       {selectedDate ? (
         <GoogleCalendarView 
           selectedDate={selectedDate} 
-          onSlotSelect={onSlotSelect} 
+          onSlotSelect={onSlotSelect}
+          selectedSlots={selectedSlots}
         />
       ) : (
         <Card className="card-enhanced animate-scale-in">

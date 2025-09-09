@@ -27,13 +27,10 @@ export type Database = {
           phone_number: string
           resume_file_path: string | null
           role_name: string
-          slot_date: string
-          slot_duration_minutes: number
-          slot_end_time: string
-          slot_start_time: string
           status: string
           team_details: string | null
           timezone: string
+          total_slots: number
           updated_at: string
           user_email: string
           user_name: string
@@ -50,13 +47,10 @@ export type Database = {
           phone_number?: string
           resume_file_path?: string | null
           role_name?: string
-          slot_date: string
-          slot_duration_minutes: number
-          slot_end_time: string
-          slot_start_time: string
           status?: string
           team_details?: string | null
           timezone?: string
+          total_slots?: number
           updated_at?: string
           user_email: string
           user_name: string
@@ -73,18 +67,53 @@ export type Database = {
           phone_number?: string
           resume_file_path?: string | null
           role_name?: string
-          slot_date?: string
-          slot_duration_minutes?: number
-          slot_end_time?: string
-          slot_start_time?: string
           status?: string
           team_details?: string | null
           timezone?: string
+          total_slots?: number
           updated_at?: string
           user_email?: string
           user_name?: string
         }
         Relationships: []
+      }
+      booking_slots: {
+        Row: {
+          booking_request_id: string
+          created_at: string
+          id: string
+          slot_date: string
+          slot_duration_minutes: number
+          slot_end_time: string
+          slot_start_time: string
+        }
+        Insert: {
+          booking_request_id: string
+          created_at?: string
+          id?: string
+          slot_date: string
+          slot_duration_minutes: number
+          slot_end_time: string
+          slot_start_time: string
+        }
+        Update: {
+          booking_request_id?: string
+          created_at?: string
+          id?: string
+          slot_date?: string
+          slot_duration_minutes?: number
+          slot_end_time?: string
+          slot_start_time?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_slots_booking_request_id_fkey"
+            columns: ["booking_request_id"]
+            isOneToOne: false
+            referencedRelation: "booking_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

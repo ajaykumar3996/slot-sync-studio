@@ -17,6 +17,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface BookingSlot {
+  slot_date: string;
+  slot_start_time: string;
+  slot_end_time: string;
+  slot_duration_minutes: number;
+}
+
 interface BookingRequest {
   user_name: string;
   user_email: string;
@@ -29,10 +36,7 @@ interface BookingRequest {
   team_details?: string;
   job_link?: string;
   message?: string;
-  slot_date: string;
-  slot_start_time: string;
-  slot_end_time: string;
-  slot_duration_minutes: number;
+  slots: BookingSlot[];
 }
 
 const fetchClientInfo = async (clientName: string, jobLink?: string | null): Promise<string> => {
@@ -169,6 +173,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
     );
 
     const approvalToken = crypto.randomUUID();
+    
+    // Insert main booking request
     const { data: bookingRequest, error } = await supabase
       .from('booking_requests')
       .insert({
@@ -183,10 +189,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         team_details: bookingData.team_details,
         job_link: bookingData.job_link,
         message: bookingData.message,
-        slot_date: bookingData.slot_date,
-        slot_start_time: bookingData.slot_start_time,
-        slot_end_time: bookingData.slot_end_time,
-        slot_duration_minutes: bookingData.slot_duration_minutes,
+        total_slots: bookingData.slots.length,
         approval_token: approvalToken,
       })
       .select()
@@ -195,6 +198,24 @@ const serve_handler = async (req: Request): Promise<Response> => {
     if (error) {
       console.error('Database error:', error);
       throw new Error(`Failed to save booking request: ${error.message}`);
+    }
+
+    // Insert individual slots
+    const slotsToInsert = bookingData.slots.map(slot => ({
+      booking_request_id: bookingRequest.id,
+      slot_date: slot.slot_date,
+      slot_start_time: slot.slot_start_time,
+      slot_end_time: slot.slot_end_time,
+      slot_duration_minutes: slot.slot_duration_minutes,
+    }));
+
+    const { error: slotsError } = await supabase
+      .from('booking_slots')
+      .insert(slotsToInsert);
+
+    if (slotsError) {
+      console.error('Slots database error:', slotsError);
+      throw new Error(`Failed to save booking slots: ${slotsError.message}`);
     }
 
     console.log('Booking request saved with ID:', bookingRequest.id);
@@ -620,10 +641,15 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
           ${bookingData.team_details ? `<p><strong>Team:</strong> ${bookingData.team_details}</p>` : ''}
           ${bookingData.job_link ? `<p><strong>Job Link:</strong> <a href="${bookingData.job_link}" target="_blank">${bookingData.job_link}</a></p>` : ''}
           
-          <h3>Interview Details</h3>
-          <p><strong>Date:</strong> ${bookingData.slot_date}</p>
-          <p><strong>Time:</strong> ${bookingData.slot_start_time} - ${bookingData.slot_end_time} CST</p>
-          <p><strong>Duration:</strong> ${bookingData.slot_duration_minutes} minutes</p>
+          <h3>Interview Details (${bookingData.slots.length} slot${bookingData.slots.length > 1 ? 's' : ''})</h3>
+          ${bookingData.slots.map((slot, index) => `
+            <div style="background: #e8f4f8; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #007bff;">
+              <p><strong>Slot ${index + 1}:</strong></p>
+              <p><strong>Date:</strong> ${slot.slot_date}</p>
+              <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} CST</p>
+              <p><strong>Duration:</strong> ${slot.slot_duration_minutes} minutes</p>
+            </div>
+          `).join('')}
           
           <h3>Attachments</h3>
           <p><strong>Resume:</strong> ${resumeAttachment ? '📄 Resume is attached to this email' : `⚠️ ${resumeStatus}`}</p>

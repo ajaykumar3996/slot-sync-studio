@@ -30,9 +30,10 @@ interface TimeSlot {
 interface GoogleCalendarViewProps {
   selectedDate: Date;
   onSlotSelect: (slot: TimeSlot) => void;
+  selectedSlots: TimeSlot[];
 }
 
-export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalendarViewProps) {
+export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots }: GoogleCalendarViewProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -140,6 +141,11 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
     });
   };
 
+  const isSlotSelected = (hour: number, minute: number, duration: number) => {
+    const slotId = `${selectedDate.toISOString()}-${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    return selectedSlots.some(slot => slot.id === slotId && slot.duration === duration);
+  };
+
   const handleSlotClick = (hour: number, minute: number, duration: 30 | 60) => {
     if (!isSlotAvailable(hour, minute, duration)) {
       toast({ title: "Slot Unavailable", description: "This time slot conflicts with an existing event", variant: "destructive" });
@@ -192,8 +198,13 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
         </CardTitle>
         <div className="mt-3 p-3 bg-muted/30 rounded-lg border border-border/50">
           <p className="text-sm text-muted-foreground text-center">
-            Click on the available slots below in the green to book a slot
+            Click on available slots to select multiple time slots. Selected slots will be highlighted in blue.
           </p>
+          {selectedSlots.length > 0 && (
+            <p className="text-xs text-primary font-medium text-center mt-2">
+              {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} selected
+            </p>
+          )}
         </div>
         {loading && (
           <div className="flex items-center gap-2 mt-2">
@@ -243,14 +254,18 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                           <Button 
                             size="sm" 
                             variant="secondary" 
-                            className="text-xs h-6 px-3 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
+                            className={`text-xs h-6 px-3 font-medium transition-all hover:scale-105 shadow-sm ${
+                              isSlotSelected(hour, 0, 30) 
+                                ? 'bg-primary/30 hover:bg-primary/40 text-primary border border-primary/50' 
+                                : 'bg-success/20 hover:bg-success/30 text-success border border-success/30'
+                            }`}
                             onClick={() => handleSlotClick(hour, 0, 30)}
                           >
                             30min
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent className="z-[100]">
-                          <p>{formatTimeRange(hour, 0, 30)}</p>
+                          <p>{formatTimeRange(hour, 0, 30)} {isSlotSelected(hour, 0, 30) ? '(Selected)' : ''}</p>
                         </TooltipContent>
                       </Tooltip>
                     ) : !isWeekend ? (
@@ -261,22 +276,26 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                    {/* Second 30-minute slot - only show for hours before 6 PM, at 6 PM we only show 6:00-6:30 */}
                    {hour < 18 && (
                       <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
-                        {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="text-xs h-6 px-3 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm"
-                                onClick={() => handleSlotClick(hour, 30, 30)}
-                              >
-                                30min
-                              </Button>
-                            </TooltipTrigger>
-                             <TooltipContent className="z-[100]">
-                               <p>{formatTimeRange(hour, 30, 30)}</p>
-                             </TooltipContent>
-                          </Tooltip>
+                         {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
+                           <Tooltip>
+                             <TooltipTrigger asChild>
+                               <Button 
+                                 size="sm" 
+                                 variant="secondary" 
+                                 className={`text-xs h-6 px-3 font-medium transition-all hover:scale-105 shadow-sm ${
+                                   isSlotSelected(hour, 30, 30) 
+                                     ? 'bg-primary/30 hover:bg-primary/40 text-primary border border-primary/50' 
+                                     : 'bg-success/20 hover:bg-success/30 text-success border border-success/30'
+                                 }`}
+                                 onClick={() => handleSlotClick(hour, 30, 30)}
+                               >
+                                 30min
+                               </Button>
+                             </TooltipTrigger>
+                              <TooltipContent className="z-[100]">
+                                <p>{formatTimeRange(hour, 30, 30)} {isSlotSelected(hour, 30, 30) ? '(Selected)' : ''}</p>
+                              </TooltipContent>
+                           </Tooltip>
                         ) : !isWeekend ? (
                           <div className="text-xs text-muted-foreground/30 font-medium"></div>
                         ) : null}
@@ -290,17 +309,21 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                           <div className="absolute inset-0 bg-background rounded-md"></div>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button 
-                                size="sm" 
-                                className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm relative z-10"
-                                onClick={() => handleSlotClick(hour, 0, 60)}
-                              >
-                                1 Hour
-                              </Button>
+                               <Button 
+                                 size="sm" 
+                                 className={`text-xs h-10 px-4 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm relative z-10 ${
+                                   isSlotSelected(hour, 0, 60) 
+                                     ? 'bg-primary/30 hover:bg-primary/40 text-primary border border-primary/50' 
+                                     : 'bg-success/20 hover:bg-success/30 text-success border border-success/30'
+                                 }`}
+                                 onClick={() => handleSlotClick(hour, 0, 60)}
+                               >
+                                 1 Hour
+                               </Button>
                             </TooltipTrigger>
-                             <TooltipContent className="z-[100]">
-                               <p>{formatTimeRange(hour, 0, 60)}</p>
-                             </TooltipContent>
+                              <TooltipContent className="z-[100]">
+                                <p>{formatTimeRange(hour, 0, 60)} {isSlotSelected(hour, 0, 60) ? '(Selected)' : ''}</p>
+                              </TooltipContent>
                           </Tooltip>
                         </div>
                       </div>
@@ -314,17 +337,21 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                             <div className="absolute inset-0 bg-background rounded-md"></div>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm relative z-10"
-                                  onClick={() => handleSlotClick(hour, 30, 60)}
-                                >
-                                  1 Hour
-                                </Button>
+                                 <Button 
+                                   size="sm" 
+                                   className={`text-xs h-10 px-4 font-medium transition-all hover:scale-105 shadow-sm relative z-10 ${
+                                     isSlotSelected(hour, 30, 60) 
+                                       ? 'bg-primary/30 hover:bg-primary/40 text-primary border border-primary/50' 
+                                       : 'bg-success/20 hover:bg-success/30 text-success border border-success/30'
+                                   }`}
+                                   onClick={() => handleSlotClick(hour, 30, 60)}
+                                 >
+                                   1 Hour
+                                 </Button>
                               </TooltipTrigger>
-                               <TooltipContent className="z-[100]">
-                                 <p>{formatTimeRange(hour, 30, 60)}</p>
-                               </TooltipContent>
+                                <TooltipContent className="z-[100]">
+                                  <p>{formatTimeRange(hour, 30, 60)} {isSlotSelected(hour, 30, 60) ? '(Selected)' : ''}</p>
+                                </TooltipContent>
                             </Tooltip>
                           </div>
                         </div>
@@ -371,7 +398,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
             </div>
           </div>
           <p className="text-xs leading-relaxed">
-            <span className="text-muted-foreground">Click any available button to book your appointment. All times shown are in </span><span className="text-destructive font-semibold">Central Standard Time (CST)</span><span className="text-muted-foreground">.</span>
+            <span className="text-muted-foreground">Click multiple available slots to select them. All times shown are in </span><span className="text-destructive font-semibold">Central Standard Time (CST)</span><span className="text-muted-foreground">.</span>
           </p>
         </div>
       </CardContent>

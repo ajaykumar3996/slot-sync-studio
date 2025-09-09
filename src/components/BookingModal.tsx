@@ -18,12 +18,13 @@ interface TimeSlot {
 }
 
 interface BookingModalProps {
-  slot: TimeSlot | null;
+  slots: TimeSlot[];
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
+export function BookingModal({ slots, isOpen, onClose, onSuccess }: BookingModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -44,7 +45,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
     e.preventDefault();
     
     // Validate required fields
-    if (!slot || !formData.name.trim() || !formData.email.trim() || 
+    if (slots.length === 0 || !formData.name.trim() || !formData.email.trim() || 
         !formData.phoneNumber.trim() || !formData.clientName.trim() || 
         !formData.roleName.trim() || !formData.jobDescription.trim() || !resumeFile || !paymentScreenshot) {
       toast({
@@ -121,10 +122,12 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
           team_details: formData.teamDetails.trim() || null,
           job_link: formData.jobLink.trim() || null,
           message: formData.message.trim() || null,
-          slot_date: slot.date.getFullYear() + '-' + String(slot.date.getMonth() + 1).padStart(2, '0') + '-' + String(slot.date.getDate()).padStart(2, '0'),
-          slot_start_time: slot.startTime,
-          slot_end_time: slot.endTime,
-          slot_duration_minutes: slot.duration,
+          slots: slots.map(slot => ({
+            slot_date: slot.date.getFullYear() + '-' + String(slot.date.getMonth() + 1).padStart(2, '0') + '-' + String(slot.date.getDate()).padStart(2, '0'),
+            slot_start_time: slot.startTime,
+            slot_end_time: slot.endTime,
+            slot_duration_minutes: slot.duration,
+          }))
         }
       });
 
@@ -164,7 +167,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
     }
   };
 
-  if (!slot) return null;
+  if (slots.length === 0) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -181,31 +184,36 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-6">
+          <div className="space-y-6">
           <div className="card-enhanced p-5 space-y-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mb-3">
               <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Calendar className="h-4 w-4 text-primary" />
               </div>
               <span className="font-semibold text-foreground">
-                {slot.date.toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
+                Selected Slots ({slots.length})
               </span>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-accent/10 flex items-center justify-center">
-                <Clock className="h-4 w-4 text-accent" />
-              </div>
-              <span className="font-semibold text-foreground">
-                {slot.startTime} - {slot.endTime} 
-                <span className="text-destructive">
-                  {" "}CST ({slot.duration} minutes)
-                </span>
-              </span>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {slots.map((slot, index) => (
+                <div key={slot.id} className="flex items-center justify-between p-2 bg-primary/5 rounded border text-sm">
+                  <div>
+                    <div className="font-medium">
+                      {slot.date.toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      {slot.startTime} - {slot.endTime} 
+                      <span className="text-destructive">
+                        {" "}CST ({slot.duration} min)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

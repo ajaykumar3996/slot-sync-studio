@@ -188,7 +188,7 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
               <span className="font-semibold text-foreground">
                 {slot.startTime} - {slot.endTime} 
                 <span className="text-destructive">
-                  CST ({slot.duration} minutes)
+                  {" "}CST ({slot.duration} minutes)
                 </span>
               </span>
             </div>

@@ -154,6 +154,7 @@ export function BookingModal({ slots, isOpen, onClose, onSuccess }: BookingModal
       });
       setResumeFile(null);
       setPaymentScreenshot(null);
+      onSuccess?.(); // Clear selected slots
       onClose();
     } catch (error) {
       console.error('Error submitting booking:', error);

@@ -75,6 +75,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
 
   const generateHourlyGrid = () => {
     const hours = [];
+    // Show hours from 8 AM to 6 PM, but 6 PM row will only show 6:00-6:30
     for (let i = 8; i <= 18; i++) {
       hours.push(i);
     }
@@ -105,9 +106,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
     const startMinutes = event.startHour * 60 + event.startMinute;
     const endMinutes = event.endHour * 60 + event.endMinute;
     const gridStartTime = 8 * 60; // 8 AM in minutes
-    const gridEndTime = 18 * 60; // 6 PM in minutes (end of visible grid)
+    const gridEndTime = 18 * 60 + 30; // 6:30 PM in minutes (end of visible grid)
     
-    // Clamp the event end time to not exceed the grid boundary
+    // Clamp the event end time to not exceed the grid boundary at 6:30 PM
     const clampedEndMinutes = Math.min(endMinutes, gridEndTime);
     
     // Each hour is 64px (h-16), so each minute is 64/60 = 1.067px
@@ -221,18 +222,18 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           {/* Time Grid */}
           <div className="border border-border rounded-lg overflow-hidden bg-background">
             {hours.map((hour, index) => (
-               <div key={hour} className="relative border-b border-border last:border-b-0 h-16">
-                 {/* Hour Label */}
-                 <div className="absolute left-0 top-0 w-16 h-full flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30">
-                   {convertTo12Hour(hour)}
+              <div key={hour} className={`relative border-b border-border last:border-b-0 ${hour === 18 ? 'h-8' : 'h-16'}`}>
+                {/* Hour Label */}
+                <div className={`absolute left-0 top-0 w-16 ${hour === 18 ? 'h-8' : 'h-full'} flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30`}>
+                  {convertTo12Hour(hour)}
                 </div>
                 
                 {/* Time Slots with permanent booking buttons */}
-                <div className="ml-16 relative h-full">
-                   {/* 30-minute divider line - show for all hours up to 6 PM to display 6:30 slot */}
-                   {hour <= 18 && (
-                     <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/50 z-5"></div>
-                   )}
+                <div className={`ml-16 relative ${hour === 18 ? 'h-8' : 'h-full'}`}>
+                  {/* 30-minute divider line - only show for hours before 6 PM */}
+                  {hour < 18 && (
+                    <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/50 z-5"></div>
+                  )}
                   
                    {/* First 30-minute slot */}
                   <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center z-10">
@@ -257,8 +258,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                     ) : null}
                   </div>
                   
-                   {/* Second 30-minute slot - show until 6:30 PM */}
-                   {hour <= 18 && (
+                   {/* Second 30-minute slot - only show for hours before 6 PM, at 6 PM we only show 6:00-6:30 */}
+                   {hour < 18 && (
                       <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
                         {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
                           <Tooltip>
@@ -281,56 +282,56 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
                         ) : null}
                       </div>
                    )}
-                  
-                   {/* 1-hour slot button from :00 (positioned on the right) */}
-                   {!isWeekend && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
-                     <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
-                       <div className="relative">
-                         <div className="absolute inset-0 bg-background rounded-md"></div>
-                         <Tooltip>
-                           <TooltipTrigger asChild>
-                             <Button 
-                               size="sm" 
-                               className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm relative z-10"
-                               onClick={() => handleSlotClick(hour, 0, 60)}
-                             >
-                               1 Hour
-                             </Button>
-                           </TooltipTrigger>
-                            <TooltipContent className="z-[100]">
-                              <p>{formatTimeRange(hour, 0, 60)}</p>
-                            </TooltipContent>
-                         </Tooltip>
-                       </div>
-                     </div>
-                   )}
-                  
-                   {/* 1-hour slot button from :30 (positioned centered across hour boundary) */}
-                   {!isWeekend && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
-                     <div className="absolute inset-0 z-40 pointer-events-none">
-                       <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
-                         <div className="relative">
-                           <div className="absolute inset-0 bg-background rounded-md"></div>
-                           <Tooltip>
-                             <TooltipTrigger asChild>
-                               <Button 
-                                 size="sm" 
-                                 className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm relative z-10"
-                                 onClick={() => handleSlotClick(hour, 30, 60)}
-                               >
-                                 1 Hour
-                               </Button>
-                             </TooltipTrigger>
-                              <TooltipContent className="z-[100]">
-                                <p>{formatTimeRange(hour, 30, 60)}</p>
-                              </TooltipContent>
-                           </Tooltip>
-                         </div>
-                       </div>
-                     </div>
-                   )}
-                </div>
-              </div>
+                   
+                    {/* 1-hour slot button from :00 (positioned on the right) - only for hours before 6 PM */}
+                    {!isWeekend && hour < 18 && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
+                      <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-background rounded-md"></div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                size="sm" 
+                                className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium pointer-events-auto transition-all hover:scale-105 shadow-sm relative z-10"
+                                onClick={() => handleSlotClick(hour, 0, 60)}
+                              >
+                                1 Hour
+                              </Button>
+                            </TooltipTrigger>
+                             <TooltipContent className="z-[100]">
+                               <p>{formatTimeRange(hour, 0, 60)}</p>
+                             </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </div>
+                    )}
+                   
+                    {/* 1-hour slot button from :30 (positioned centered across hour boundary) - only for hours before 6 PM */}
+                    {!isWeekend && hour < 18 && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
+                      <div className="absolute inset-0 z-40 pointer-events-none">
+                        <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-background rounded-md"></div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  size="sm" 
+                                  className="text-xs h-10 px-4 bg-success/20 hover:bg-success/30 text-success border border-success/30 font-medium transition-all hover:scale-105 shadow-sm relative z-10"
+                                  onClick={() => handleSlotClick(hour, 30, 60)}
+                                >
+                                  1 Hour
+                                </Button>
+                              </TooltipTrigger>
+                               <TooltipContent className="z-[100]">
+                                 <p>{formatTimeRange(hour, 30, 60)}</p>
+                               </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                 </div>
+               </div>
             ))}
           </div>
           
@@ -338,9 +339,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           <div className="absolute top-0 left-16 right-0 pointer-events-none">
             {events
               .filter((event) => {
-                // Only show events that start before 6 PM (18:00)
+                // Show events that start before 6:30 PM (18:30)
                 const eventStartMinutes = event.startHour * 60 + event.startMinute;
-                return eventStartMinutes < 18 * 60; // Before 6 PM
+                return eventStartMinutes < 18 * 60 + 30; // Before 6:30 PM
               })
               .map((event) => {
                 const position = getEventPosition(event);

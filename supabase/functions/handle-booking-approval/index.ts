@@ -321,7 +321,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
   }
 };
 
-// Function to create Google Calendar event automatically
+// Function to create Google Calendar events automatically (one per slot)
 async function createGoogleCalendarEvent(bookingRequest: any, bookingSlots: any[]) {
   console.log('🔑 Getting Google credentials...');
   const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
@@ -338,46 +338,8 @@ async function createGoogleCalendarEvent(bookingRequest: any, bookingSlots: any[
   const accessToken = await getGoogleAccessToken(googleClientEmail, googlePrivateKey);
   console.log('✅ Access token obtained successfully');
   
-  // For now, create a calendar event for the first slot only
-  // TODO: Handle multiple slots - could create multiple events or combine them
-  const firstSlot = bookingSlots[0];
+  const createdEvents = [];
   
-  // Parse the booking date and time
-  const eventDate = firstSlot.slot_date; // YYYY-MM-DD
-  const startTime = firstSlot.slot_start_time; // e.g., "08:00:00" (24-hour format from DB)
-  const endTime = firstSlot.slot_end_time; // e.g., "08:30:00" (24-hour format from DB)
-  
-  console.log('📅 Event details:', { eventDate, startTime, endTime });
-  
-  // Times are already in 24-hour format from database, use them directly
-  // Create proper Central Time ISO strings
-  const startDateTime = `${eventDate}T${startTime}-05:00`; // CDT is UTC-5
-  const endDateTime = `${eventDate}T${endTime}-05:00`;
-  
-  console.log('🕐 Converted times:', { startDateTime, endDateTime });
-  
-  const calendarEvent = {
-    summary: `${bookingRequest.user_name}${bookingSlots.length > 1 ? ` (${bookingSlots.length} slots)` : ''}`,
-    description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nTotal slots: ${bookingSlots.length}\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
-    start: {
-      dateTime: startDateTime,
-      timeZone: 'America/Chicago'
-    },
-    end: {
-      dateTime: endDateTime,
-      timeZone: 'America/Chicago'
-    },
-    reminders: {
-      useDefault: false,
-      overrides: [
-        { method: 'email', minutes: 60 },
-        { method: 'popup', minutes: 15 }
-      ]
-    }
-  };
-
-  console.log('📋 Calendar event object created:', JSON.stringify(calendarEvent, null, 2));
-
   // Try different calendar approaches
   const calendarAttempts = [
     'itmate.ai@gmail.com',
@@ -385,49 +347,88 @@ async function createGoogleCalendarEvent(bookingRequest: any, bookingSlots: any[
     googleClientEmail
   ];
   
-  console.log('🎯 Attempting to create event on calendars:', calendarAttempts);
+  console.log('🎯 Attempting to create individual events for each slot on calendars:', calendarAttempts);
   
-  for (const calendarId of calendarAttempts) {
-    try {
-      console.log(`📍 Trying calendar: ${calendarId}`);
-      
-      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(calendarEvent),
-      });
-
-      console.log(`📡 API Response for ${calendarId}:`, response.status, response.statusText);
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`🎉 SUCCESS! Calendar event created on ${calendarId}:`, {
-          id: result.id,
-          htmlLink: result.htmlLink,
-          status: result.status
-        });
-        return result;
-      } else {
-        const errorData = await response.text();
-        console.error(`❌ Failed on ${calendarId} (${response.status}):`, errorData);
-        
-        // If this is the last calendar, throw the error
-        if (calendarId === calendarAttempts[calendarAttempts.length - 1]) {
-          throw new Error(`All calendar attempts failed. Final error: ${response.status} - ${errorData}`);
-        }
+  // Create a separate calendar event for each slot
+  for (let i = 0; i < bookingSlots.length; i++) {
+    const slot = bookingSlots[i];
+    const eventDate = slot.slot_date; // YYYY-MM-DD
+    const startTime = slot.slot_start_time; // e.g., "08:00:00" (24-hour format from DB)
+    const endTime = slot.slot_end_time; // e.g., "08:30:00" (24-hour format from DB)
+    
+    console.log(`📅 Creating event ${i + 1}/${bookingSlots.length}:`, { eventDate, startTime, endTime });
+    
+    // Times are already in 24-hour format from database, use them directly
+    // Create proper Central Time ISO strings
+    const startDateTime = `${eventDate}T${startTime}-05:00`; // CDT is UTC-5
+    const endDateTime = `${eventDate}T${endTime}-05:00`;
+    
+    console.log('🕐 Converted times:', { startDateTime, endDateTime });
+    
+    const calendarEvent = {
+      summary: `${bookingRequest.user_name} - Slot ${i + 1}/${bookingSlots.length}`,
+      description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nSlot ${i + 1} of ${bookingSlots.length}\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
+      start: {
+        dateTime: startDateTime,
+        timeZone: 'America/Chicago'
+      },
+      end: {
+        dateTime: endDateTime,
+        timeZone: 'America/Chicago'
+      },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: 'email', minutes: 60 },
+          { method: 'popup', minutes: 15 }
+        ]
       }
-    } catch (fetchError) {
-      console.error(`💥 Exception with calendar ${calendarId}:`, fetchError.message);
-      
-      // If this is the last calendar, throw the error
-      if (calendarId === calendarAttempts[calendarAttempts.length - 1]) {
-        throw new Error(`All calendar attempts failed. Final exception: ${fetchError.message}`);
+    };
+
+    console.log(`📋 Calendar event ${i + 1} object created:`, JSON.stringify(calendarEvent, null, 2));
+
+    let eventCreated = false;
+    for (const calendarId of calendarAttempts) {
+      try {
+        console.log(`📍 Trying calendar: ${calendarId} for slot ${i + 1}`);
+        
+        const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(calendarEvent),
+        });
+
+        console.log(`📡 API Response for ${calendarId} slot ${i + 1}:`, response.status, response.statusText);
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`🎉 SUCCESS! Calendar event ${i + 1} created on ${calendarId}:`, {
+            id: result.id,
+            htmlLink: result.htmlLink,
+            status: result.status
+          });
+          createdEvents.push(result);
+          eventCreated = true;
+          break; // Move to next slot once this one is created
+        } else {
+          const errorData = await response.text();
+          console.error(`❌ Failed on ${calendarId} for slot ${i + 1} (${response.status}):`, errorData);
+        }
+      } catch (fetchError) {
+        console.error(`💥 Exception with calendar ${calendarId} for slot ${i + 1}:`, fetchError.message);
       }
     }
+    
+    if (!eventCreated) {
+      throw new Error(`Failed to create calendar event for slot ${i + 1} on all calendars`);
+    }
   }
+  
+  console.log(`✅ All ${createdEvents.length} calendar events created successfully`);
+  return createdEvents[0]; // Return first event for backwards compatibility
 }
 
 // Google authentication functions

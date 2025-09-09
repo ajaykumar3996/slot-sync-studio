@@ -105,12 +105,16 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
     const startMinutes = event.startHour * 60 + event.startMinute;
     const endMinutes = event.endHour * 60 + event.endMinute;
     const gridStartTime = 8 * 60; // 8 AM in minutes
+    const gridEndTime = 18 * 60; // 6 PM in minutes (end of visible grid)
+    
+    // Clamp the event end time to not exceed the grid boundary
+    const clampedEndMinutes = Math.min(endMinutes, gridEndTime);
     
     // Each hour is 64px (h-16), so each minute is 64/60 = 1.067px
     const pixelsPerMinute = 64 / 60;
     
     const topPixels = (startMinutes - gridStartTime) * pixelsPerMinute;
-    const heightPixels = (endMinutes - startMinutes) * pixelsPerMinute;
+    const heightPixels = (clampedEndMinutes - startMinutes) * pixelsPerMinute;
     
     return { 
       top: `${topPixels}px`, 

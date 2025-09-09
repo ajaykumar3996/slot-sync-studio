@@ -134,7 +134,7 @@ export default function DynamicFavicon(props: {
       document.querySelectorAll(`link[rel~="icon"].${cfg.className}`).forEach(n => n.remove());
       for (const [sz, href] of m) {
         const l = document.createElement("link");
-        l.rel = "icon"; l.sizes = `${sz}x${sz}`; l.href = href; l.className = cfg.className;
+        l.rel = "icon"; l.setAttribute("sizes", `${sz}x${sz}`); l.href = href; l.className = cfg.className;
         document.head.appendChild(l);
       }
     };

@@ -21,10 +21,8 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
         </Routes>
         <DynamicFavicon
-  timeZone="America/Chicago"
-  // tweak if your heading gradient uses different stops:
-  textGradient={["#4F7BFF", "#6DB6FF"]}
-/>
+          timeZone="America/Chicago"
+        />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,10 +72,16 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
 
         if (uploadError) {
           console.error('Resume upload error:', uploadError);
-          throw new Error('Failed to upload resume');
+          // Don't throw error - allow booking to continue without resume
+          resumeFilePath = null;
+          toast({
+            title: "File Upload Warning", 
+            description: "Resume upload failed, but booking will continue.",
+            variant: "destructive"
+          });
+        } else {
+          resumeFilePath = uploadData.path;
         }
-        
-        resumeFilePath = uploadData.path;
       }
 
       // Upload payment screenshot if provided
@@ -89,10 +95,16 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
 
         if (uploadError) {
           console.error('Payment screenshot upload error:', uploadError);
-          throw new Error('Failed to upload payment screenshot');
+          // Don't throw error - allow booking to continue without payment screenshot
+          paymentScreenshotPath = null;
+          toast({
+            title: "File Upload Warning",
+            description: "Payment screenshot upload failed, but booking will continue.",
+            variant: "destructive"
+          });
+        } else {
+          paymentScreenshotPath = uploadData.path;
         }
-        
-        paymentScreenshotPath = uploadData.path;
       }
 
       // Submit booking request via Supabase edge function
@@ -164,6 +176,9 @@ export function BookingModal({ slot, isOpen, onClose }: BookingModalProps) {
             </div> */}
             <span className="text-gradient">Enter the required details to book your slot</span>
           </DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Please fill out the form below to request your appointment booking.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-6">

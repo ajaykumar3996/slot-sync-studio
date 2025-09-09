@@ -336,19 +336,25 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect }: GoogleCalenda
           
           {/* Events Overlay */}
           <div className="absolute top-0 left-16 right-0 pointer-events-none">
-            {events.map((event) => {
-              const position = getEventPosition(event);
-              return (
-                <div key={event.id} className="absolute left-1 right-1 z-30" style={{ top: position.top, height: position.height }}>
-                  <div className="absolute inset-0 bg-background rounded-md"></div>
-                  <div className="absolute inset-0 bg-destructive/20 text-destructive rounded-md px-2 py-1 text-xs font-medium border border-destructive/30 pointer-events-auto z-10">
-                    <div className="flex items-center justify-center h-full">
-                      <span className="text-xs font-medium">Busy</span>
+            {events
+              .filter((event) => {
+                // Only show events that start before 6 PM (18:00)
+                const eventStartMinutes = event.startHour * 60 + event.startMinute;
+                return eventStartMinutes < 18 * 60; // Before 6 PM
+              })
+              .map((event) => {
+                const position = getEventPosition(event);
+                return (
+                  <div key={event.id} className="absolute left-1 right-1 z-30" style={{ top: position.top, height: position.height }}>
+                    <div className="absolute inset-0 bg-background rounded-md"></div>
+                    <div className="absolute inset-0 bg-destructive/20 text-destructive rounded-md px-2 py-1 text-xs font-medium border border-destructive/30 pointer-events-auto z-10">
+                      <div className="flex items-center justify-center h-full">
+                        <span className="text-xs font-medium">Busy</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </div>
         

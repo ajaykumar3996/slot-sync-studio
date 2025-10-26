@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Clock, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getTimezoneAbbreviation } from "@/lib/timezones";
 
 interface CalendarEvent {
   id: string;
@@ -102,7 +103,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
     const endTime12 = convertTo12Hour(endHour);
     const endMinuteStr = endMinute === 0 ? "" : `.${endMinute.toString().padStart(2, '0')}`;
     
-    const tzAbbr = selectedTimezone.split('/')[1]?.replace('_', ' ') || 'CST';
+    const tzAbbr = getTimezoneAbbreviation(selectedTimezone);
     return `${startTime12.replace(' ', startMinuteStr + ' ')} - ${endTime12.replace(' ', endMinuteStr + ' ')} ${tzAbbr}`;
   };
 

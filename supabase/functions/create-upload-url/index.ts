@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { z } from "npm:zod@3.23.8";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': 'https://localhost:3000',
@@ -12,6 +13,19 @@ const allowedOrigins = [
   'http://localhost:3000',
   process.env.SITE_URL,
 ].filter(Boolean);
+
+// Security: Input validation schema
+const UploadRequestSchema = z.object({
+  fileName: z.string().trim().min(1, 'Filename required').max(255, 'Filename too long')
+    .regex(/^[a-zA-Z0-9._\-]+$/, 'Invalid filename characters'),
+  contentType: z.string().trim().min(1, 'Content type required')
+    .regex(/^[a-zA-Z0-9\-\/]+$/, 'Invalid content type'),
+  captchaToken: z.string().min(10, 'Invalid CAPTCHA token'),
+});
+
+// File size limits (in bytes)
+const MAX_RESUME_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_PAYMENT_SIZE = 5 * 1024 * 1024;  // 5MB
 
 async function validateCaptcha(token: string): Promise<boolean> {
   // Simple validation - in production, integrate with reCAPTCHA or similar
@@ -33,7 +47,23 @@ serve(async (req) => {
       });
     }
 
-    const { fileName, contentType, captchaToken } = await req.json();
+    const rawData = await req.json();
+    
+    // Security: Validate input with Zod
+    const validationResult = UploadRequestSchema.safeParse(rawData);
+    
+    if (!validationResult.success) {
+      console.error('Input validation failed:', validationResult.error.errors);
+      return new Response(JSON.stringify({ 
+        error: 'Invalid input data',
+        details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { fileName, contentType, captchaToken } = validationResult.data;
 
     // Validate CAPTCHA
     if (!await validateCaptcha(captchaToken)) {
@@ -43,26 +73,25 @@ serve(async (req) => {
       });
     }
 
-    // Validate inputs
-    if (!fileName || !contentType) {
-      return new Response(JSON.stringify({ error: 'Missing fileName or contentType' }), {
+    // Sanitize filename (already validated by Zod)
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._\-]/g, '_');
+    const fileExtension = sanitizedFileName.split('.').pop()?.toLowerCase();
+    
+    // Validate file type
+    const allowedTypes = ['pdf', 'doc', 'docx', 'txt', 'rtf', 'jpg', 'jpeg', 'png'];
+    if (!fileExtension || !allowedTypes.includes(fileExtension)) {
+      return new Response(JSON.stringify({ 
+        error: 'Invalid file type',
+        allowed: allowedTypes 
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Sanitize filename
-    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const fileExtension = sanitizedFileName.split('.').pop()?.toLowerCase();
-    
-    // Validate file type
-    const allowedTypes = ['pdf', 'doc', 'docx', 'txt', 'rtf'];
-    if (!fileExtension || !allowedTypes.includes(fileExtension)) {
-      return new Response(JSON.stringify({ error: 'Invalid file type' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // Determine file size limit based on content type
+    const isImage = ['jpg', 'jpeg', 'png'].includes(fileExtension);
+    const maxSize = isImage ? MAX_PAYMENT_SIZE : MAX_RESUME_SIZE;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -72,7 +101,7 @@ serve(async (req) => {
     const timestamp = Date.now();
     const filePath = `${timestamp}_${sanitizedFileName}`;
 
-    // Create signed upload URL (valid for 5 minutes)
+    // Create signed upload URL (valid for 5 minutes) with size limit
     const { data, error } = await supabase.storage
       .from('resumes')
       .createSignedUploadUrl(filePath, {
@@ -90,7 +119,9 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       uploadUrl: data.signedUrl,
       filePath: filePath,
-      token: data.token
+      token: data.token,
+      maxSize: maxSize,
+      maxSizeMB: Math.round(maxSize / 1024 / 1024)
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
 import JSZip from "npm:jszip@3.10.1";
 import { getDocument } from "npm:pdfjs-dist@4.0.379/legacy/build/pdf.mjs";
+import { z } from "npm:zod@3.23.8";
 
 // Security: Allowed origins for CORS
 const allowedOrigins = [
@@ -16,6 +17,29 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*', // Will be set dynamically
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Security: Comprehensive input validation schema
+const BookingSlotSchema = z.object({
+  slot_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  slot_start_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/, 'Invalid time format'),
+  slot_end_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/, 'Invalid time format'),
+  slot_duration_minutes: z.number().int().positive().max(240),
+});
+
+const BookingRequestSchema = z.object({
+  user_name: z.string().trim().min(1, 'Name is required').max(100, 'Name too long'),
+  user_email: z.string().trim().email('Invalid email format').max(255, 'Email too long'),
+  phone_number: z.string().trim().regex(/^[\d\s\+\-\(\)]+$/, 'Invalid phone number format').min(10).max(20),
+  client_name: z.string().trim().min(1, 'Client name is required').max(200, 'Client name too long'),
+  role_name: z.string().trim().min(1, 'Role name is required').max(200, 'Role name too long'),
+  job_description: z.string().trim().min(1, 'Job description is required').max(5000, 'Job description too long'),
+  resume_file_path: z.string().regex(/^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$/, 'Invalid file path').optional(),
+  payment_screenshot_path: z.string().regex(/^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$/, 'Invalid file path').optional(),
+  team_details: z.string().trim().max(2000, 'Team details too long').optional(),
+  job_link: z.string().trim().url('Invalid URL format').max(500).optional().or(z.literal('')),
+  message: z.string().trim().max(2000, 'Message too long').optional(),
+  slots: z.array(BookingSlotSchema).min(1, 'At least one slot required').max(10, 'Too many slots'),
+});
 
 interface BookingSlot {
   slot_date: string;
@@ -38,6 +62,18 @@ interface BookingRequest {
   message?: string;
   slots: BookingSlot[];
 }
+
+// Security: HTML escape function to prevent XSS
+const escapeHtml = (text: string): string => {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, (char) => map[char] || char);
+};
 
 const fetchClientInfo = async (clientName: string, jobLink?: string | null): Promise<string> => {
   try {
@@ -148,24 +184,27 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
   try {
     // Parse and validate the incoming booking request
-    const bookingData: BookingRequest = await req.json();
-    console.log('Received booking request from:', bookingData.user_email);
-
-    // Security: Validate and sanitize input data
-    if (!bookingData.user_name || !bookingData.user_email || !bookingData.phone_number) {
-      throw new Error('Missing required fields: user_name, user_email, or phone_number');
+    const rawData = await req.json();
+    
+    // Security: Comprehensive validation with Zod
+    const validationResult = BookingRequestSchema.safeParse(rawData);
+    
+    if (!validationResult.success) {
+      console.error('Input validation failed:', validationResult.error.errors);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid input data',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
-
-    // Security: Validate file paths to prevent path traversal
-    if (bookingData.resume_file_path && !bookingData.resume_file_path.match(/^resume-\d+-[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/)) {
-      console.error('Invalid resume file path format:', bookingData.resume_file_path);
-      throw new Error('Invalid resume file path format');
-    }
-
-    if (bookingData.payment_screenshot_path && !bookingData.payment_screenshot_path.match(/^payment-\d+-[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/)) {
-      console.error('Invalid payment screenshot path format:', bookingData.payment_screenshot_path);
-      throw new Error('Invalid payment screenshot path format');
-    }
+    
+    const bookingData: BookingRequest = validationResult.data;
+    console.log('Received validated booking request');
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -175,21 +214,21 @@ const serve_handler = async (req: Request): Promise<Response> => {
     const approvalToken = crypto.randomUUID();
     const cancellationToken = crypto.randomUUID();
     
-    // Insert main booking request
+    // Insert main booking request (data already validated by Zod)
     const { data: bookingRequest, error } = await supabase
       .from('booking_requests')
       .insert({
-        user_name: bookingData.user_name,
-        user_email: bookingData.user_email,
+        user_name: escapeHtml(bookingData.user_name),
+        user_email: bookingData.user_email.toLowerCase(),
         phone_number: bookingData.phone_number,
-        client_name: bookingData.client_name,
-        role_name: bookingData.role_name,
-        job_description: bookingData.job_description,
+        client_name: escapeHtml(bookingData.client_name),
+        role_name: escapeHtml(bookingData.role_name),
+        job_description: escapeHtml(bookingData.job_description),
         resume_file_path: bookingData.resume_file_path,
         payment_screenshot_path: bookingData.payment_screenshot_path,
-        team_details: bookingData.team_details,
-        job_link: bookingData.job_link,
-        message: bookingData.message,
+        team_details: bookingData.team_details ? escapeHtml(bookingData.team_details) : null,
+        job_link: bookingData.job_link || null,
+        message: bookingData.message ? escapeHtml(bookingData.message) : null,
         total_slots: bookingData.slots.length,
         approval_token: approvalToken,
         cancellation_token: cancellationToken,
@@ -199,7 +238,13 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     if (error) {
       console.error('Database error:', error);
-      throw new Error(`Failed to save booking request: ${error.message}`);
+      return new Response(
+        JSON.stringify({ error: 'Failed to process booking request' }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Insert individual slots
@@ -217,7 +262,13 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     if (slotsError) {
       console.error('Slots database error:', slotsError);
-      throw new Error(`Failed to save booking slots: ${slotsError.message}`);
+      return new Response(
+        JSON.stringify({ error: 'Failed to process booking slots' }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     console.log('Booking request saved with ID:', bookingRequest.id);

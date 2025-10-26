@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Clock, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { getTimezoneAbbreviation, TIMEZONE_OPTIONS } from "@/lib/timezones";
+import { getTimezoneAbbreviation, TIMEZONE_OPTIONS, convertCSTWorkingHoursToTimezone } from "@/lib/timezones";
 
 interface CalendarEvent {
   id: string;
@@ -78,9 +78,10 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
   }, [selectedDate, selectedTimezone]);
 
   const generateHourlyGrid = () => {
+    // Convert CST working hours (8:00 AM - 6:30 PM) to selected timezone
+    const { startHour, endHour } = convertCSTWorkingHoursToTimezone(selectedTimezone);
     const hours = [];
-    // Show hours from 8 AM to 6 PM, but 6 PM row will only show 6:00-6:30
-    for (let i = 8; i <= 18; i++) {
+    for (let i = startHour; i <= endHour; i++) {
       hours.push(i);
     }
     return hours;
@@ -108,12 +109,13 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
   };
 
   const getEventPosition = (event: CalendarEvent) => {
+    const { startHour, startMinute, endHour, endMinute } = convertCSTWorkingHoursToTimezone(selectedTimezone);
     const startMinutes = event.startHour * 60 + event.startMinute;
     const endMinutes = event.endHour * 60 + event.endMinute;
-    const gridStartTime = 8 * 60; // 8 AM in minutes
-    const gridEndTime = 18 * 60 + 30; // 6:30 PM in minutes (end of visible grid)
+    const gridStartTime = startHour * 60 + startMinute;
+    const gridEndTime = endHour * 60 + endMinute;
     
-    // Clamp the event end time to not exceed the grid boundary at 6:30 PM
+    // Clamp the event end time to not exceed the grid boundary
     const clampedEndMinutes = Math.min(endMinutes, gridEndTime);
     
     // Each hour is 64px (h-16), so each minute is 64/60 = 1.067px
@@ -130,8 +132,9 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
   };
 
   const canFit = (hour: number, minute: number, duration: number) => {
+    const { endHour, endMinute } = convertCSTWorkingHoursToTimezone(selectedTimezone);
     const slotEnd = hour * 60 + minute + duration;
-    return slotEnd <= 18 * 60 + 30; // Must end by 6:30 PM
+    return slotEnd <= endHour * 60 + endMinute;
   };
 
   const isSlotAvailable = (hour: number, minute: number, duration: 30 | 60) => {
@@ -175,6 +178,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
   };
 
   const hours = generateHourlyGrid();
+  const { endHour, endMinute } = convertCSTWorkingHoursToTimezone(selectedTimezone);
+  const isLastHourPartial = endMinute === 30; // Check if last hour only shows first 30 minutes
   
   // Check if selected date is weekend
   const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6; // Sunday = 0, Saturday = 6
@@ -236,19 +241,23 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
         <div className={`relative ${isWeekend ? 'opacity-50' : ''}`}>
           {/* Time Grid */}
           <div className="border border-border rounded-lg overflow-hidden bg-background">
-            {hours.map((hour, index) => (
-              <div key={hour} className={`relative border-b border-border last:border-b-0 ${hour === 18 ? 'h-8' : 'h-16'}`}>
+            {hours.map((hour, index) => {
+              const isLastHour = index === hours.length - 1;
+              const hourHeight = isLastHour && isLastHourPartial ? 'h-8' : 'h-16';
+              
+              return (
+              <div key={hour} className={`relative border-b border-border last:border-b-0 ${hourHeight}`}>
                 {/* Hour Label */}
-                <div className={`absolute left-0 top-0 w-16 ${hour === 18 ? 'h-8' : 'h-full'} flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30`}>
+                <div className={`absolute left-0 top-0 w-16 ${hourHeight} flex items-start justify-center pt-2 text-xs text-muted-foreground bg-muted/50 border-r border-border z-30`}>
                   {convertTo12Hour(hour)}
                 </div>
                 
                 {/* Time Slots with permanent booking buttons */}
-                <div className={`ml-16 relative ${hour === 18 ? 'h-8' : 'h-full'}`}>
-                  {/* 30-minute divider line - only show for hours before 6 PM */}
-                  {hour < 18 && (
+                <div className={`ml-16 relative ${hourHeight}`}>
+                  {/* 30-minute divider line - only show for full hours */}
+                  {!isLastHour || !isLastHourPartial ? (
                     <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-border/50 z-5"></div>
-                  )}
+                  ) : null}
                   
                    {/* First 30-minute slot */}
                   <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center z-10">
@@ -277,8 +286,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
                     ) : null}
                   </div>
                   
-                   {/* Second 30-minute slot - only show for hours before 6 PM, at 6 PM we only show 6:00-6:30 */}
-                   {hour < 18 && (
+                   {/* Second 30-minute slot - only show for full hours */}
+                   {(!isLastHour || !isLastHourPartial) && (
                       <div className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center z-10">
                          {!isWeekend && isSlotAvailable(hour, 30, 30) && canFit(hour, 30, 30) ? (
                            <Tooltip>
@@ -306,8 +315,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
                       </div>
                    )}
                    
-                    {/* 1-hour slot button from :00 (positioned on the right) - only for hours before 6 PM */}
-                    {!isWeekend && hour < 18 && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
+                     {/* 1-hour slot button from :00 (positioned on the right) - only for full hours */}
+                     {!isWeekend && (!isLastHour || !isLastHourPartial) && isSlotAvailable(hour, 0, 60) && canFit(hour, 0, 60) && (
                       <div className="absolute inset-0 flex items-center justify-end pr-3 z-40 pointer-events-none">
                         <div className="relative">
                           <div className="absolute inset-0 bg-background rounded-md"></div>
@@ -333,8 +342,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
                       </div>
                     )}
                    
-                    {/* 1-hour slot button from :30 (positioned centered across hour boundary) - only for hours before 6 PM */}
-                    {!isWeekend && hour < 18 && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
+                    {/* 1-hour slot button from :30 (positioned centered across hour boundary) - only for full hours */}
+                    {!isWeekend && (!isLastHour || !isLastHourPartial) && isSlotAvailable(hour, 30, 60) && canFit(hour, 30, 60) && (
                       <div className="absolute inset-0 z-40 pointer-events-none">
                         <div className="absolute top-8 left-3 h-16 flex items-center pointer-events-auto">
                           <div className="relative">
@@ -363,16 +372,17 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
                     )}
                  </div>
                </div>
-            ))}
+            );
+            })}
           </div>
           
           {/* Events Overlay */}
           <div className="absolute top-0 left-16 right-0 pointer-events-none">
             {events
               .filter((event) => {
-                // Show events that start before 6:30 PM (18:30)
+                const { endHour, endMinute } = convertCSTWorkingHoursToTimezone(selectedTimezone);
                 const eventStartMinutes = event.startHour * 60 + event.startMinute;
-                return eventStartMinutes < 18 * 60 + 30; // Before 6:30 PM
+                return eventStartMinutes < endHour * 60 + endMinute;
               })
               .map((event) => {
                 const position = getEventPosition(event);

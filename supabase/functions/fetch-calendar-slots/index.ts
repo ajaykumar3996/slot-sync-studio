@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { parseISO, format, addMinutes, isWithinInterval, startOfDay } from "https://esm.sh/date-fns@3.6.0";
+import { toZonedTime, fromZonedTime } from "https://esm.sh/date-fns-tz@3.2.0";
 
 // Security: Allowed origins for CORS
 const allowedOrigins = [
@@ -24,7 +25,7 @@ interface TimeSlot {
 }
 
 const DEFAULT_TIMEZONE = "America/Chicago";
-const WORKING_HOURS = { start: 8, end: 18 }; // 8 AM - 6 PM in calendar owner's timezone
+const WORKING_HOURS_CST = { startHour: 8, startMinute: 0, endHour: 18, endMinute: 30 }; // 8:00 AM - 6:30 PM CST
 
 function logTime(label: string, date: Date, timezone: string) {
   console.log(`${label}: ${date.toISOString()} (UTC) / ${date.toLocaleString('en-US', { timeZone: timezone })} (${timezone})`);
@@ -192,6 +193,22 @@ function generateAvailableSlotsWithEvents(
   const end = parseISO(endDate);
   
   console.log(`📅 Processing dates from ${start.toISOString()} to ${end.toISOString()}`);
+  
+  // Convert CST working hours to the user's timezone
+  const cstDate = new Date();
+  cstDate.setHours(WORKING_HOURS_CST.startHour, WORKING_HOURS_CST.startMinute, 0, 0);
+  const cstEndDate = new Date();
+  cstEndDate.setHours(WORKING_HOURS_CST.endHour, WORKING_HOURS_CST.endMinute, 0, 0);
+  
+  const workStartInUserTZ = toZonedTime(fromZonedTime(cstDate, 'America/Chicago'), timezone);
+  const workEndInUserTZ = toZonedTime(fromZonedTime(cstEndDate, 'America/Chicago'), timezone);
+  
+  const workStartHour = workStartInUserTZ.getHours();
+  const workStartMinute = workStartInUserTZ.getMinutes();
+  const workEndHour = workEndInUserTZ.getHours();
+  const workEndMinute = workEndInUserTZ.getMinutes();
+  
+  console.log(`🕐 Working hours in ${timezone}: ${workStartHour}:${workStartMinute.toString().padStart(2, '0')} - ${workEndHour}:${workEndMinute.toString().padStart(2, '0')}`);
 
   for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
     const tzDate = new Date(currentDate.toLocaleString("en-US", { timeZone: timezone }));
@@ -205,10 +222,13 @@ function generateAvailableSlotsWithEvents(
     const dateStr = format(tzDate, 'yyyy-MM-dd');
     console.log(`\n📆 Generating slots for ${dateStr} in ${timezone} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][tzDate.getDay()]})`);
     
-
-    // Create base 30-minute slots
-    for (let hour = WORKING_HOURS.start; hour < WORKING_HOURS.end; hour++) {
-      for (let minutes = 0; minutes < 60; minutes += 30) {
+    // Create base 30-minute slots using converted working hours
+    const totalMinutesStart = workStartHour * 60 + workStartMinute;
+    const totalMinutesEnd = workEndHour * 60 + workEndMinute;
+    
+    for (let currentMinutes = totalMinutesStart; currentMinutes < totalMinutesEnd; currentMinutes += 30) {
+      const hour = Math.floor(currentMinutes / 60);
+      const minutes = currentMinutes % 60;
         const slotStartTZ = new Date(
           tzDate.getFullYear(),
           tzDate.getMonth(),
@@ -274,8 +294,9 @@ function generateAvailableSlotsWithEvents(
         
         console.log(`  ${isAvailable ? '✅ AVAILABLE' : '❌ BUSY'} - 30min slot`);
         
-        // Create 60-minute slot if it doesn't go past 6PM
-        if (minutes === 0 && hour < WORKING_HOURS.end - 1) {
+        // Create 60-minute slot if it doesn't go past working hours end
+        const slotEnd60Minutes = currentMinutes + 60;
+        if (minutes === 0 && slotEnd60Minutes <= totalMinutesEnd) {
           const slotEnd60TZ = new Date(slotStartTZ.getTime() + 60 * 60000);
           
           console.log(`  ➕ Checking 60min extension for ${slotKey}`);

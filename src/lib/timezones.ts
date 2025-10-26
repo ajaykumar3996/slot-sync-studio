@@ -1,4 +1,4 @@
-import { formatInTimeZone } from 'date-fns-tz';
+import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 export interface TimezoneOption {
   value: string;
@@ -20,4 +20,28 @@ export function getTimezoneAbbreviation(timezone: string): string {
 
 export function formatTimeInTimezone(date: Date, timezone: string, format: string = 'h:mm a'): string {
   return formatInTimeZone(date, timezone, format);
+}
+
+// Convert CST working hours (8:00 AM - 6:30 PM) to any timezone
+export function convertCSTWorkingHoursToTimezone(timezone: string): {
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+} {
+  // Create dates in CST for working hours
+  const today = new Date();
+  const cstStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 8, 0, 0); // 8:00 AM CST
+  const cstEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 18, 30, 0); // 6:30 PM CST
+  
+  // Convert from CST to target timezone
+  const startInTargetTZ = toZonedTime(fromZonedTime(cstStart, 'America/Chicago'), timezone);
+  const endInTargetTZ = toZonedTime(fromZonedTime(cstEnd, 'America/Chicago'), timezone);
+  
+  return {
+    startHour: startInTargetTZ.getHours(),
+    startMinute: startInTargetTZ.getMinutes(),
+    endHour: endInTargetTZ.getHours(),
+    endMinute: endInTargetTZ.getMinutes(),
+  };
 }

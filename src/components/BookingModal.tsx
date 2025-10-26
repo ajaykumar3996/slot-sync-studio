@@ -22,9 +22,10 @@ interface BookingModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  selectedTimezone: string;
 }
 
-export function BookingModal({ slots, isOpen, onClose, onSuccess }: BookingModalProps) {
+export function BookingModal({ slots, isOpen, onClose, onSuccess, selectedTimezone }: BookingModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -122,6 +123,7 @@ export function BookingModal({ slots, isOpen, onClose, onSuccess }: BookingModal
           team_details: formData.teamDetails.trim() || null,
           job_link: formData.jobLink.trim() || null,
           message: formData.message.trim() || null,
+          timezone: selectedTimezone,
           slots: slots.map(slot => ({
             slot_date: slot.date.getFullYear() + '-' + String(slot.date.getMonth() + 1).padStart(2, '0') + '-' + String(slot.date.getDate()).padStart(2, '0'),
             slot_start_time: slot.startTime,
@@ -209,7 +211,7 @@ export function BookingModal({ slots, isOpen, onClose, onSuccess }: BookingModal
                     <div className="text-muted-foreground text-xs">
                       {slot.startTime} - {slot.endTime} 
                       <span className="text-destructive">
-                        {" "}CST ({slot.duration} min)
+                        {" "}{selectedTimezone.split('/')[1]?.replace('_', ' ') || 'CT'} ({slot.duration} min)
                       </span>
                     </div>
                   </div>

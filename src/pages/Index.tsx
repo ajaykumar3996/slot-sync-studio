@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { SlotCalendar } from "@/components/SlotCalendar";
 import { BookingModal } from "@/components/BookingModal";
+import { TimezoneSelector } from "@/components/TimezoneSelector";
+import { getTimezoneAbbreviation } from "@/lib/timezones";
 import bookMySlotLogo from "@/assets/book-my-slot-logo.png";
 interface TimeSlot {
   id: string;
@@ -14,6 +16,7 @@ interface TimeSlot {
 const Index = () => {
   const [selectedSlots, setSelectedSlots] = useState<TimeSlot[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTimezone, setSelectedTimezone] = useState<string>('America/Chicago');
 
   const handleSlotSelect = (slot: TimeSlot) => {
     setSelectedSlots(prev => {
@@ -64,11 +67,22 @@ const Index = () => {
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            All time slots are displayed in Central Standard Time (CST)
+            All time slots are displayed in {getTimezoneAbbreviation(selectedTimezone)}
           </div>
         </div>
+
+        <div className="max-w-md mx-auto mb-8">
+          <TimezoneSelector 
+            selectedTimezone={selectedTimezone}
+            onTimezoneChange={setSelectedTimezone}
+          />
+        </div>
         
-        <SlotCalendar onSlotSelect={handleSlotSelect} selectedSlots={selectedSlots} />
+        <SlotCalendar 
+          onSlotSelect={handleSlotSelect} 
+          selectedSlots={selectedSlots}
+          selectedTimezone={selectedTimezone}
+        />
         
         {/* Selected Slots Summary */}
         {selectedSlots.length > 0 && (
@@ -105,7 +119,13 @@ const Index = () => {
           </div>
         )}
 
-        <BookingModal slots={selectedSlots} isOpen={isModalOpen} onClose={handleModalClose} onSuccess={clearSelectedSlots} />
+        <BookingModal 
+          slots={selectedSlots} 
+          isOpen={isModalOpen} 
+          onClose={handleModalClose} 
+          onSuccess={clearSelectedSlots}
+          selectedTimezone={selectedTimezone}
+        />
       </div>
       
       <footer className="text-center py-6 border-t border-border/10">

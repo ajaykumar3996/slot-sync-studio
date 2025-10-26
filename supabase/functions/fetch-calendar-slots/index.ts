@@ -23,8 +23,8 @@ interface TimeSlot {
   duration: number;
 }
 
-const CST_TIMEZONE = "America/Chicago";
-const WORKING_HOURS = { start: 8, end: 18 }; // 8 AM - 6 PM CST
+const DEFAULT_TIMEZONE = "America/Chicago";
+const WORKING_HOURS = { start: 8, end: 18 }; // 8 AM - 6 PM in calendar owner's timezone
 
 function toCST(date: Date): Date {
   return new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
@@ -62,7 +62,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
   try {
     // Parse and validate request
     const requestBody = await req.json();
-    const { startDate, endDate, fetchEvents } = requestBody;
+    const { startDate, endDate, fetchEvents, timezone } = requestBody;
     
     // Input validation
     if (!startDate || !endDate) {
@@ -72,7 +72,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    console.log('⏳ Fetching calendar data for date range:', { startDate, endDate, fetchEvents });
+    const userTimezone = timezone || DEFAULT_TIMEZONE;
+    console.log('⏳ Fetching calendar data for date range:', { startDate, endDate, fetchEvents, timezone: userTimezone });
 
     const googleClientEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL');
     const googlePrivateKey = Deno.env.get('GOOGLE_PRIVATE_KEY');
@@ -91,7 +92,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     // Fetch events from Google Calendar
     console.log('📡 Fetching events from Google Calendar...');
-    const events = await fetchCalendarEvents(accessToken, calendarId, startDate, endDate);
+    const events = await fetchCalendarEvents(accessToken, calendarId, startDate, endDate, userTimezone);
     console.log(`📊 Fetched ${events.length} events`);
     
     // Log all events with detailed information
@@ -113,19 +114,19 @@ const serve_handler = async (req: Request): Promise<Response> => {
         const startTime = new Date(event.start.dateTime || event.start.date);
         const endTime = new Date(event.end.dateTime || event.end.date);
         
-        // Convert to CST for display
-        const startCST = new Date(startTime.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
-        const endCST = new Date(endTime.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+        // Convert to user's timezone for display
+        const startTZ = new Date(startTime.toLocaleString("en-US", { timeZone: userTimezone }));
+        const endTZ = new Date(endTime.toLocaleString("en-US", { timeZone: userTimezone }));
         
         return {
           id: event.id.split('_')[0] || event.id, // Sanitize IDs
           title: "Busy", // Hide actual event titles for privacy
-          startTime: format(startCST, 'HH:mm'),
-          endTime: format(endCST, 'HH:mm'),
-          startHour: startCST.getHours(),
-          startMinute: startCST.getMinutes(),
-          endHour: endCST.getHours(),
-          endMinute: endCST.getMinutes()
+          startTime: format(startTZ, 'HH:mm'),
+          endTime: format(endTZ, 'HH:mm'),
+          startHour: startTZ.getHours(),
+          startMinute: startTZ.getMinutes(),
+          endHour: endTZ.getHours(),
+          endMinute: endTZ.getMinutes()
         };
       });
 
@@ -138,7 +139,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
 
     // Generate available slots
     console.log('🔄 Generating available slots...');
-    const availableSlots = generateAvailableSlotsWithEvents(events, startDate, endDate);
+    const availableSlots = generateAvailableSlotsWithEvents(events, startDate, endDate, userTimezone);
     console.log(`✅ Generated ${availableSlots.length} time slots`);
 
     return new Response(
@@ -160,7 +161,8 @@ async function fetchCalendarEvents(
   accessToken: string,
   calendarId: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  timezone: string
 ): Promise<any[]> {
   console.log('🌐 Calling Events API with:', {
     timeMin: startDate,
@@ -174,7 +176,7 @@ async function fetchCalendarEvents(
     timeMax: endDate,
     singleEvents: 'true',
     orderBy: 'startTime',
-    timeZone: CST_TIMEZONE
+    timeZone: timezone
   });
 
   const response = await fetch(`${url}?${params}`, {
@@ -201,7 +203,8 @@ async function fetchCalendarEvents(
 function generateAvailableSlotsWithEvents(
   events: any[],
   startDate: string,
-  endDate: string
+  endDate: string,
+  timezone: string
 ): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const start = parseISO(startDate);
@@ -210,46 +213,34 @@ function generateAvailableSlotsWithEvents(
   console.log(`📅 Processing dates from ${start.toISOString()} to ${end.toISOString()}`);
 
   for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
-    const cstDate = toCST(currentDate);
+    const tzDate = new Date(currentDate.toLocaleString("en-US", { timeZone: timezone }));
     
     // Skip weekends
-    if (cstDate.getDay() === 0 || cstDate.getDay() === 6) {
-      console.log(`🚫 Skipping weekend: ${format(cstDate, 'yyyy-MM-dd')} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][cstDate.getDay()]})`);
+    if (tzDate.getDay() === 0 || tzDate.getDay() === 6) {
+      console.log(`🚫 Skipping weekend: ${format(tzDate, 'yyyy-MM-dd')} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][tzDate.getDay()]})`);
       continue;
     }
 
-    const dateStr = format(cstDate, 'yyyy-MM-dd');
-    console.log(`\n📆 Generating slots for ${dateStr} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][cstDate.getDay()]})`);
+    const dateStr = format(tzDate, 'yyyy-MM-dd');
+    console.log(`\n📆 Generating slots for ${dateStr} in ${timezone} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][tzDate.getDay()]})`);
     
-    // Get CST offset for this date (for UTC conversion)
-    const cstOffsetMs = getCSTOffsetMs(currentDate);
-    console.log(`⏱️ CST offset: ${cstOffsetMs / 60000} minutes`);
 
     // Create base 30-minute slots
     for (let hour = WORKING_HOURS.start; hour < WORKING_HOURS.end; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
-        const slotStartCST = new Date(
-          cstDate.getFullYear(),
-          cstDate.getMonth(),
-          cstDate.getDate(),
+        const slotStartTZ = new Date(
+          tzDate.getFullYear(),
+          tzDate.getMonth(),
+          tzDate.getDate(),
           hour,
           minutes
         );
         
-        const slotEndCST = new Date(slotStartCST.getTime() + 30 * 60000);
+        const slotEndTZ = new Date(slotStartTZ.getTime() + 30 * 60000);
         const slotKey = `${hour}:${minutes.toString().padStart(2, '0')}`;
         
-        // SIMPLIFIED: Work directly with CST times since Google API supports timeZone parameter
-        console.log(`\n🔍 DEBUGGING SLOT CONFLICT DETECTION:`);
-        console.log(`📅 Checking slot: ${slotKey} on ${dateStr}`);
-        console.log(`🕒 Slot times (CST): ${format(slotStartCST, 'h:mm a')} - ${format(slotEndCST, 'h:mm a')}`);
-        
-        // Special debug for August 1st
-        if (dateStr === '2025-08-01' && (slotKey === '8:30' || slotKey === '9:00')) {
-          console.log(`🚨 SPECIAL DEBUG for August 1st ${slotKey} slot:`);
-          console.log(`   🔢 Slot start CST: ${slotStartCST.toISOString()}`);
-          console.log(`   🔢 Slot end CST: ${slotEndCST.toISOString()}`);
-        }
+        console.log(`\n🔍 Checking slot: ${slotKey} on ${dateStr}`);
+        console.log(`🕒 Slot times (${timezone}): ${format(slotStartTZ, 'h:mm a')} - ${format(slotEndTZ, 'h:mm a')}`);
         
         console.log(`📊 Total events to check: ${events.length}`);
         
@@ -259,29 +250,20 @@ function generateAvailableSlotsWithEvents(
           const eventStart = new Date(event.start.dateTime || event.start.date);
           const eventEnd = new Date(event.end.dateTime || event.end.date);
           
-          // Convert events to CST for comparison
-          const eventStartCST = new Date(eventStart.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
-          const eventEndCST = new Date(eventEnd.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
+          // Convert events to user's timezone for comparison
+          const eventStartTZ = new Date(eventStart.toLocaleString("en-US", { timeZone: timezone }));
+          const eventEndTZ = new Date(eventEnd.toLocaleString("en-US", { timeZone: timezone }));
           
           console.log(`\n📅 Event #${eventIndex + 1}: "${event.summary || 'No title'}"`);
-          console.log(`   📍 Event start (UTC): ${eventStart.toISOString()}`);
-          console.log(`   📍 Event end (UTC):   ${eventEnd.toISOString()}`);
-          console.log(`   📍 Event start (CST): ${eventStart.toLocaleString('en-US', { timeZone: CST_TIMEZONE })}`);
-          console.log(`   📍 Event end (CST):   ${eventEnd.toLocaleString('en-US', { timeZone: CST_TIMEZONE })}`);
+          console.log(`   📍 Event start (${timezone}): ${eventStart.toLocaleString('en-US', { timeZone: timezone })}`);
+          console.log(`   📍 Event end (${timezone}):   ${eventEnd.toLocaleString('en-US', { timeZone: timezone })}`);
           
-          // Special debug for August 1st 8:30-9:00 slot
-          if (dateStr === '2025-08-01' && slotKey === '8:30') {
-            console.log(`🚨 AUGUST 1st 8:30 SLOT DEBUG:`);
-            console.log(`   📍 Our slot: ${format(slotStartCST, 'M/d/yyyy, h:mm:ss a')} - ${format(slotEndCST, 'M/d/yyyy, h:mm:ss a')} CST`);
-            console.log(`   📍 Event time: ${eventStart.toLocaleString('en-US', { timeZone: CST_TIMEZONE })} - ${eventEnd.toLocaleString('en-US', { timeZone: CST_TIMEZONE })} CST`);
-          }
+          // Check if slot overlaps with event
+          const overlap = slotStartTZ < eventEnd && slotEndTZ > eventStart;
           
-          // Check if slot overlaps with event using CST times
-          const overlap = slotStartCST < eventEnd && slotEndCST > eventStart;
-          
-          console.log(`\n🔄 OVERLAP CALCULATION (using original UTC times):`);
-          console.log(`   ❓ Is slotStart < eventEnd? ${slotStartCST.toISOString()} < ${eventEnd.toISOString()} = ${slotStartCST < eventEnd}`);
-          console.log(`   ❓ Is slotEnd > eventStart? ${slotEndCST.toISOString()} > ${eventStart.toISOString()} = ${slotEndCST > eventStart}`);
+          console.log(`\n🔄 OVERLAP CALCULATION:`);
+          console.log(`   ❓ Is slotStart < eventEnd? ${slotStartTZ.toISOString()} < ${eventEnd.toISOString()} = ${slotStartTZ < eventEnd}`);
+          console.log(`   ❓ Is slotEnd > eventStart? ${slotEndTZ.toISOString()} > ${eventStart.toISOString()} = ${slotEndTZ > eventStart}`);
           console.log(`   ❓ Both conditions true (overlap)? ${overlap}`);
           
           if (overlap) {
@@ -295,19 +277,14 @@ function generateAvailableSlotsWithEvents(
         }
         
         console.log(`\n📊 FINAL RESULT for slot ${slotKey}: ${isAvailable ? '✅ AVAILABLE' : '❌ BLOCKED'}`);
-        if (!isAvailable) {
-          console.log(`❌ This slot will appear as BLOCKED in the interface`);
-        } else {
-          console.log(`✅ This slot will appear as AVAILABLE with Book button`);
-        }
         
-        const startTimeStr = format(slotStartCST, 'h:mm a');
-        const endTimeStr = format(slotEndCST, 'h:mm a');
+        const startTimeStr = format(slotStartTZ, 'h:mm a');
+        const endTimeStr = format(slotEndTZ, 'h:mm a');
         
         // Add 30-minute slot
         slots.push({
           id: `${dateStr}-${slotKey}-30`,
-          date: new Date(slotStartCST),
+          date: new Date(slotStartTZ),
           startTime: startTimeStr,
           endTime: endTimeStr,
           isAvailable,
@@ -318,7 +295,7 @@ function generateAvailableSlotsWithEvents(
         
         // Create 60-minute slot if it doesn't go past 6PM
         if (minutes === 0 && hour < WORKING_HOURS.end - 1) {
-          const slotEnd60CST = new Date(slotStartCST.getTime() + 60 * 60000);
+          const slotEnd60TZ = new Date(slotStartTZ.getTime() + 60 * 60000);
           
           console.log(`  ➕ Checking 60min extension for ${slotKey}`);
           
@@ -331,7 +308,7 @@ function generateAvailableSlotsWithEvents(
               const eventEnd = new Date(event.end.dateTime || event.end.date);
               
               // Check the full 60min slot against events
-              const overlap = slotStartCST < eventEnd && slotEnd60CST > eventStart;
+              const overlap = slotStartTZ < eventEnd && slotEnd60TZ > eventStart;
               
               if (overlap) {
                 isAvailable60 = false;
@@ -342,11 +319,11 @@ function generateAvailableSlotsWithEvents(
           }
           
           if (isAvailable60) {
-            const endTime60Str = format(slotEnd60CST, 'h:mm a');
+            const endTime60Str = format(slotEnd60TZ, 'h:mm a');
             
             slots.push({
               id: `${dateStr}-${slotKey}-60`,
-              date: new Date(slotStartCST),
+              date: new Date(slotStartTZ),
               startTime: startTimeStr,
               endTime: endTime60Str,
               isAvailable: true,

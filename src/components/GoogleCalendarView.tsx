@@ -31,9 +31,10 @@ interface GoogleCalendarViewProps {
   selectedDate: Date;
   onSlotSelect: (slot: TimeSlot) => void;
   selectedSlots: TimeSlot[];
+  selectedTimezone: string;
 }
 
-export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots }: GoogleCalendarViewProps) {
+export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, selectedTimezone }: GoogleCalendarViewProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -53,7 +54,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots }
         body: {
           startDate: startOfDay.toISOString(),
           endDate: endOfDay.toISOString(),
-          fetchEvents: true
+          fetchEvents: true,
+          timezone: selectedTimezone
         }
       });
 
@@ -100,7 +102,8 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots }
     const endTime12 = convertTo12Hour(endHour);
     const endMinuteStr = endMinute === 0 ? "" : `.${endMinute.toString().padStart(2, '0')}`;
     
-    return `${startTime12.replace(' ', startMinuteStr + ' ')} - ${endTime12.replace(' ', endMinuteStr + ' ')} CST`;
+    const tzAbbr = selectedTimezone.split('/')[1]?.replace('_', ' ') || 'CST';
+    return `${startTime12.replace(' ', startMinuteStr + ' ')} - ${endTime12.replace(' ', endMinuteStr + ' ')} ${tzAbbr}`;
   };
 
   const getEventPosition = (event: CalendarEvent) => {

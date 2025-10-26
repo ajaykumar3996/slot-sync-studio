@@ -16,9 +16,10 @@ interface TimeSlot {
 interface SlotCalendarProps {
   onSlotSelect: (slot: TimeSlot) => void;
   selectedSlots: TimeSlot[];
+  selectedTimezone: string;
 }
 
-export function SlotCalendar({ onSlotSelect, selectedSlots }: SlotCalendarProps) {
+export function SlotCalendar({ onSlotSelect, selectedSlots, selectedTimezone }: SlotCalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date>();
 
   return (
@@ -89,6 +90,7 @@ export function SlotCalendar({ onSlotSelect, selectedSlots }: SlotCalendarProps)
           selectedDate={selectedDate} 
           onSlotSelect={onSlotSelect}
           selectedSlots={selectedSlots}
+          selectedTimezone={selectedTimezone}
         />
       ) : (
         <Card className="card-enhanced animate-scale-in">

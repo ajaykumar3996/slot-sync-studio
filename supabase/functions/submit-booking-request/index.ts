@@ -38,6 +38,7 @@ const BookingRequestSchema = z.object({
   team_details: z.string().trim().max(2000, 'Team details too long').nullish(),
   job_link: z.string().trim().url('Invalid URL format').max(500).nullish(),
   message: z.string().trim().max(2000, 'Message too long').nullish(),
+  timezone: z.string().regex(/^[A-Za-z]+\/[A-Za-z_]+$/, 'Invalid timezone format').optional().default('America/Chicago'),
   slots: z.array(BookingSlotSchema).min(1, 'At least one slot required').max(10, 'Too many slots'),
 });
 

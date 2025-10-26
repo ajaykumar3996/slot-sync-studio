@@ -20,7 +20,7 @@ export function TimezoneSelector({ selectedTimezone, onTimezoneChange }: Timezon
         <Globe className="h-5 w-5 text-primary" />
       </div>
       <div className="flex-1">
-        <label className="text-sm font-medium mb-1 block">Timezone</label>
+        <label className="text-sm font-medium mb-1 block text-center">Timezone</label>
         <Select value={selectedTimezone} onValueChange={onTimezoneChange}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select timezone" />

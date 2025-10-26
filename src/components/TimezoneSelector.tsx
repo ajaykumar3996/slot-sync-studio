@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TIMEZONE_OPTIONS } from "@/lib/timezones";
 
 interface TimezoneSelectorProps {
@@ -15,12 +16,16 @@ interface TimezoneSelectorProps {
 
 export function TimezoneSelector({ selectedTimezone, onTimezoneChange }: TimezoneSelectorProps) {
   return (
-    <div className="flex items-center gap-3 p-4 rounded-lg bg-card border">
-      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-        <Globe className="h-5 w-5 text-primary" />
-      </div>
-      <div className="flex-1">
-        <label className="text-sm font-medium mb-1 block text-center">Timezone</label>
+    <Card className="card-enhanced animate-scale-in">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-3 text-xl">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Globe className="h-5 w-5 text-primary" />
+          </div>
+          <span className="text-gradient">Select your timezone</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
         <Select value={selectedTimezone} onValueChange={onTimezoneChange}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select timezone" />
@@ -33,7 +38,7 @@ export function TimezoneSelector({ selectedTimezone, onTimezoneChange }: Timezon
             ))}
           </SelectContent>
         </Select>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

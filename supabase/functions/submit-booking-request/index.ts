@@ -677,6 +677,18 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
       disposition: 'attachment'
     });
 
+    // Determine timezone abbreviation for display
+    const getTimezoneAbbr = (tz: string): string => {
+      const abbrs: Record<string, string> = {
+        'America/New_York': 'EST',
+        'America/Chicago': 'CST',
+        'America/Denver': 'MST',
+        'America/Los_Angeles': 'PST',
+      };
+      return abbrs[tz] || 'CST';
+    };
+    const timezoneAbbr = getTimezoneAbbr(bookingData.timezone || 'America/Chicago');
+
     const emailResponse = await resend.emails.send({
       from: "Book My Slot <anand@bookmyslot.me>",
       to: ["itmate.ai@gmail.com"],
@@ -701,7 +713,7 @@ Response: "Balancing technical debt requires prioritizing tasks. I'd evaluate th
             <div style="background: #e8f4f8; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #007bff;">
               <p><strong>Slot ${index + 1}:</strong></p>
               <p><strong>Date:</strong> ${slot.slot_date}</p>
-              <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} CST</p>
+              <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} ${timezoneAbbr}</p>
               <p><strong>Duration:</strong> ${slot.slot_duration_minutes} minutes</p>
             </div>
           `).join('')}

@@ -1,4 +1,4 @@
-import { Clock } from "lucide-react";
+import { Globe } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -17,7 +17,7 @@ export function TimezoneSelector({ selectedTimezone, onTimezoneChange }: Timezon
   return (
     <div className="flex items-center gap-3 p-4 rounded-lg bg-card border">
       <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-        <Clock className="h-5 w-5 text-primary" />
+        <Globe className="h-5 w-5 text-primary" />
       </div>
       <div className="flex-1">
         <label className="text-sm font-medium mb-1 block">Timezone</label>

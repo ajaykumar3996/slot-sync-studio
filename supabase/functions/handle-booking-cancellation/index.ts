@@ -202,7 +202,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
-        'Expires': '0'
+        'Expires': '0',
+        ...finalCorsHeaders
       }
     });
 
@@ -210,7 +211,10 @@ const serve_handler = async (req: Request): Promise<Response> => {
     console.error('Error in handle-booking-cancellation function:', error);
     return new Response(createErrorPage(error.message), {
       status: 500,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      headers: { 
+        'Content-Type': 'text/html; charset=utf-8',
+        ...finalCorsHeaders
+      },
     });
   }
 };

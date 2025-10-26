@@ -230,6 +230,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         team_details: bookingData.team_details ? escapeHtml(bookingData.team_details) : null,
         job_link: bookingData.job_link || null,
         message: bookingData.message ? escapeHtml(bookingData.message) : null,
+        timezone: bookingData.timezone || 'America/Chicago',
         total_slots: bookingData.slots.length,
         approval_token: approvalToken,
         cancellation_token: cancellationToken,

@@ -120,6 +120,21 @@ const serve_handler = async (req: Request): Promise<Response> => {
         
         const isApproved = action === 'approve';
         const firstSlot = bookingSlots[0]; // Use first slot for email subject
+        
+        // Get timezone abbreviation
+        const getTimezoneAbbr = (tz: string): string => {
+          const abbrs: Record<string, string> = {
+            'America/New_York': 'EST',
+            'America/Chicago': 'CST',
+            'America/Denver': 'MST',
+            'America/Los_Angeles': 'PST',
+          };
+          return abbrs[tz] || 'CST';
+        };
+        
+        const userTimezone = bookingRequest.timezone || 'America/Chicago';
+        const timezoneAbbr = getTimezoneAbbr(userTimezone);
+        
         const subject = isApproved 
           ? `Meeting Request Confirmed - ${firstSlot.slot_date} ${firstSlot.slot_start_time}${bookingSlots.length > 1 ? ` (+${bookingSlots.length - 1} more)` : ''}`
           : `Booking Request Declined - ${firstSlot.slot_date}`;
@@ -162,7 +177,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
               <div style="background: #e8f4f8; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #007bff;">
                 <p><strong>Slot ${index + 1}:</strong></p>
                 <p><strong>Date:</strong> ${slot.slot_date}</p>
-                <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} CST</p>
+                <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} ${timezoneAbbr}</p>
                 <p><strong>Duration:</strong> ${slot.slot_duration_minutes} minutes</p>
               </div>
             `).join('')}
@@ -197,7 +212,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
               <div style="background: #f8e8e8; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #dc2626;">
                 <p><strong>Slot ${index + 1}:</strong></p>
                 <p><strong>Date:</strong> ${slot.slot_date}</p>
-                <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} CST</p>
+                <p><strong>Time:</strong> ${slot.slot_start_time} - ${slot.slot_end_time} ${timezoneAbbr}</p>
                 <p><strong>Duration:</strong> ${slot.slot_duration_minutes} minutes</p>
               </div>
             `).join('')}
@@ -365,6 +380,20 @@ async function createGoogleCalendarEvent(bookingRequest: any, bookingSlots: any[
   
   console.log('🎯 Attempting to create individual events for each slot on calendars:', calendarAttempts);
   
+  // Get timezone abbreviation helper
+  const getTimezoneAbbr = (tz: string): string => {
+    const abbrs: Record<string, string> = {
+      'America/New_York': 'EST',
+      'America/Chicago': 'CST',
+      'America/Denver': 'MST',
+      'America/Los_Angeles': 'PST',
+    };
+    return abbrs[tz] || 'CST';
+  };
+
+  const userTimezone = bookingRequest.timezone || 'America/Chicago';
+  const timezoneAbbr = getTimezoneAbbr(userTimezone);
+
   // Create a separate calendar event for each slot
   for (let i = 0; i < bookingSlots.length; i++) {
     const slot = bookingSlots[i];
@@ -372,25 +401,24 @@ async function createGoogleCalendarEvent(bookingRequest: any, bookingSlots: any[
     const startTime = slot.slot_start_time; // e.g., "08:00:00" (24-hour format from DB)
     const endTime = slot.slot_end_time; // e.g., "08:30:00" (24-hour format from DB)
     
-    console.log(`📅 Creating event ${i + 1}/${bookingSlots.length}:`, { eventDate, startTime, endTime });
+    console.log(`📅 Creating event ${i + 1}/${bookingSlots.length}:`, { eventDate, startTime, endTime, timezone: userTimezone });
     
-    // Times are already in 24-hour format from database, use them directly
-    // Create proper Central Time ISO strings
-    const startDateTime = `${eventDate}T${startTime}-05:00`; // CDT is UTC-5
-    const endDateTime = `${eventDate}T${endTime}-05:00`;
+    // Create proper ISO strings with the user's timezone
+    const startDateTime = `${eventDate}T${startTime}`;
+    const endDateTime = `${eventDate}T${endTime}`;
     
-    console.log('🕐 Converted times:', { startDateTime, endDateTime });
+    console.log('🕐 Converted times:', { startDateTime, endDateTime, timeZone: userTimezone });
     
     const calendarEvent = {
       summary: `${bookingRequest.user_name} - Slot ${i + 1}/${bookingSlots.length}`,
-      description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nSlot ${i + 1} of ${bookingSlots.length}\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
+      description: `Booking confirmed for ${bookingRequest.user_name} (${bookingRequest.user_email})\n\nSlot ${i + 1} of ${bookingSlots.length}\n\nTimezone: ${timezoneAbbr}\n\nMessage: ${bookingRequest.message || 'No message provided'}`,
       start: {
         dateTime: startDateTime,
-        timeZone: 'America/Chicago'
+        timeZone: userTimezone
       },
       end: {
         dateTime: endDateTime,
-        timeZone: 'America/Chicago'
+        timeZone: userTimezone
       },
       reminders: {
         useDefault: false,

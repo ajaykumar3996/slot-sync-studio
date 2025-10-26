@@ -21,8 +21,8 @@ const corsHeaders = {
 // Security: Comprehensive input validation schema
 const BookingSlotSchema = z.object({
   slot_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
-  slot_start_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/, 'Invalid time format'),
-  slot_end_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/, 'Invalid time format'),
+  slot_start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Invalid time format'),
+  slot_end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Invalid time format'),
   slot_duration_minutes: z.number().int().positive().max(240),
 });
 
@@ -33,11 +33,11 @@ const BookingRequestSchema = z.object({
   client_name: z.string().trim().min(1, 'Client name is required').max(200, 'Client name too long'),
   role_name: z.string().trim().min(1, 'Role name is required').max(200, 'Role name too long'),
   job_description: z.string().trim().min(1, 'Job description is required').max(5000, 'Job description too long'),
-  resume_file_path: z.string().regex(/^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$/, 'Invalid file path').optional(),
-  payment_screenshot_path: z.string().regex(/^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$/, 'Invalid file path').optional(),
-  team_details: z.string().trim().max(2000, 'Team details too long').optional(),
-  job_link: z.string().trim().url('Invalid URL format').max(500).optional().or(z.literal('')),
-  message: z.string().trim().max(2000, 'Message too long').optional(),
+  resume_file_path: z.string().regex(/^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$/, 'Invalid file path').nullish(),
+  payment_screenshot_path: z.string().regex(/^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$/, 'Invalid file path').nullish(),
+  team_details: z.string().trim().max(2000, 'Team details too long').nullish(),
+  job_link: z.string().trim().url('Invalid URL format').max(500).nullish(),
+  message: z.string().trim().max(2000, 'Message too long').nullish(),
   slots: z.array(BookingSlotSchema).min(1, 'At least one slot required').max(10, 'Too many slots'),
 });
 

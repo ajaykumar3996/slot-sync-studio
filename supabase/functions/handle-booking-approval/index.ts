@@ -148,6 +148,11 @@ const serve_handler = async (req: Request): Promise<Response> => {
           </div>
         `;
 
+        // Generate cancellation URL for approved bookings
+        const cancellationUrl = isApproved && bookingRequest.cancellation_token 
+          ? `https://rnkxaezxodhvrxameair.supabase.co/functions/v1/handle-booking-cancellation?token=${bookingRequest.cancellation_token}`
+          : null;
+
         // Create interview instructions section only for approved bookings
         const interviewInstructions = isApproved ? `
           <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -172,6 +177,17 @@ const serve_handler = async (req: Request): Promise<Response> => {
             </ol>
             <p><strong>Please share these credentials and the six digit pin with me.</strong></p>
             <p>I will send you the otter link before the interview starts.</p>
+            ${cancellationUrl ? `
+            <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px; margin-top: 20px;">
+              <p><strong>⚠️ Need to cancel?</strong></p>
+              <p style="font-size: 14px; margin-bottom: 10px;">If you need to cancel this booking, please click the button below:</p>
+              <a href="${cancellationUrl}" 
+                 style="background: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 14px;"
+                 target="_blank">
+                🚫 Cancel Booking
+              </a>
+            </div>
+            ` : ''}
           </div>
         ` : `
           <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">

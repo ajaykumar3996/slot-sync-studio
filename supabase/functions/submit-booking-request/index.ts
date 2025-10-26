@@ -173,6 +173,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
     );
 
     const approvalToken = crypto.randomUUID();
+    const cancellationToken = crypto.randomUUID();
     
     // Insert main booking request
     const { data: bookingRequest, error } = await supabase
@@ -191,6 +192,7 @@ const serve_handler = async (req: Request): Promise<Response> => {
         message: bookingData.message,
         total_slots: bookingData.slots.length,
         approval_token: approvalToken,
+        cancellation_token: cancellationToken,
       })
       .select()
       .single();

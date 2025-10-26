@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Clock, Plus } from "lucide-react";
+import { CalendarClock, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getTimezoneAbbreviation, TIMEZONE_OPTIONS, convertCSTWorkingHoursToTimezone } from "@/lib/timezones";
@@ -190,7 +190,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-3 text-xl">
           <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Clock className="h-5 w-5 text-primary" />
+            <CalendarClock className="h-5 w-5 text-primary" />
           </div>
           <div className="flex flex-col">
             <span className="text-gradient">

@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Clock, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { getTimezoneAbbreviation } from "@/lib/timezones";
+import { getTimezoneAbbreviation, TIMEZONE_OPTIONS } from "@/lib/timezones";
 
 interface CalendarEvent {
   id: string;
@@ -402,7 +402,11 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
             </div>
           </div>
           <p className="text-xs leading-relaxed">
-            <span className="text-muted-foreground">Click multiple available slots to select them. All times shown are in </span><span className="text-destructive font-semibold">Central Standard Time (CST)</span><span className="text-muted-foreground">.</span>
+            <span className="text-muted-foreground">Click multiple available slots to select them. All times shown are in </span>
+            <span className="text-destructive font-semibold">
+              {TIMEZONE_OPTIONS.find(tz => tz.value === selectedTimezone)?.label || 'Central Time'} ({getTimezoneAbbreviation(selectedTimezone)})
+            </span>
+            <span className="text-muted-foreground">.</span>
           </p>
         </div>
       </CardContent>

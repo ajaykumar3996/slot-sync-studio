@@ -26,27 +26,8 @@ interface TimeSlot {
 const DEFAULT_TIMEZONE = "America/Chicago";
 const WORKING_HOURS = { start: 8, end: 18 }; // 8 AM - 6 PM in calendar owner's timezone
 
-function toCST(date: Date): Date {
-  return new Date(date.toLocaleString("en-US", { timeZone: CST_TIMEZONE }));
-}
-
-// Fixed timezone conversion - CST is UTC-6 (standard) or UTC-5 (daylight)
-function getCSTOffsetMs(date: Date): number {
-  // Get the timezone offset in minutes for CST/CDT
-  const tempDate = new Date(date.getTime());
-  const utcTime = tempDate.getTime() + (tempDate.getTimezoneOffset() * 60000);
-  const cstTime = new Date(utcTime + (-6 * 3600000)); // CST is UTC-6
-  
-  // Check if daylight saving time is in effect
-  const january = new Date(date.getFullYear(), 0, 1);
-  const july = new Date(date.getFullYear(), 6, 1);
-  const isDST = Math.max(january.getTimezoneOffset(), july.getTimezoneOffset()) !== date.getTimezoneOffset();
-  
-  return isDST ? -5 * 3600000 : -6 * 3600000; // CDT is UTC-5, CST is UTC-6
-}
-
-function logTime(label: string, date: Date) {
-  console.log(`${label}: ${date.toISOString()} (UTC) / ${date.toLocaleString('en-US', { timeZone: CST_TIMEZONE })} (CST)`);
+function logTime(label: string, date: Date, timezone: string) {
+  console.log(`${label}: ${date.toISOString()} (UTC) / ${date.toLocaleString('en-US', { timeZone: timezone })} (${timezone})`);
 }
 
 const serve_handler = async (req: Request): Promise<Response> => {
@@ -100,8 +81,8 @@ const serve_handler = async (req: Request): Promise<Response> => {
       console.log(`📅 Event #${index + 1}: "${event.summary || 'No title'}"`);
       const eventStart = new Date(event.start.dateTime || event.start.date);
       const eventEnd = new Date(event.end.dateTime || event.end.date);
-      logTime('  Start', eventStart);
-      logTime('  End  ', eventEnd);
+      logTime('  Start', eventStart, userTimezone);
+      logTime('  End  ', eventEnd, userTimezone);
       console.log(`  Duration: ${(eventEnd.getTime() - eventStart.getTime()) / 60000} minutes`);
       console.log(`  All-day: ${!event.start.dateTime ? 'Yes' : 'No'}`);
     });

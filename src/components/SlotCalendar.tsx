@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Clock } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { GoogleCalendarView } from "./GoogleCalendarView";
 
 interface TimeSlot {
@@ -28,7 +28,7 @@ export function SlotCalendar({ onSlotSelect, selectedSlots, selectedTimezone }: 
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-3 text-xl">
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Clock className="h-5 w-5 text-primary" />
+              <CalendarDays className="h-5 w-5 text-primary" />
             </div>
             <span className="text-gradient">Select a Date</span>
           </CardTitle>

@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Calendar, Clock, User, Mail, MessageSquare, Phone, Building, Briefcase, FileText, Users, Link, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getTimezoneAbbreviation } from "@/lib/timezones";
 
 interface TimeSlot {
   id: string;
@@ -211,7 +212,7 @@ export function BookingModal({ slots, isOpen, onClose, onSuccess, selectedTimezo
                     <div className="text-muted-foreground text-xs">
                       {slot.startTime} - {slot.endTime} 
                       <span className="text-destructive">
-                        {" "}{selectedTimezone.split('/')[1]?.replace('_', ' ') || 'CT'} ({slot.duration} min)
+                        {" "}{getTimezoneAbbreviation(selectedTimezone)} ({slot.duration} min)
                       </span>
                     </div>
                   </div>

@@ -7,17 +7,15 @@ export interface TimezoneOption {
 }
 
 export const TIMEZONE_OPTIONS: TimezoneOption[] = [
-  { value: 'America/New_York', label: 'Eastern Time', abbreviation: 'ET' },
-  { value: 'America/Chicago', label: 'Central Time', abbreviation: 'CT' },
-  { value: 'America/Denver', label: 'Mountain Time', abbreviation: 'MT' },
-  { value: 'America/Los_Angeles', label: 'Pacific Time', abbreviation: 'PT' },
-  { value: 'America/Anchorage', label: 'Alaska Time', abbreviation: 'AKT' },
-  { value: 'Pacific/Honolulu', label: 'Hawaii Time', abbreviation: 'HT' },
+  { value: 'America/New_York', label: 'Eastern Time', abbreviation: 'EST' },
+  { value: 'America/Chicago', label: 'Central Time', abbreviation: 'CST' },
+  { value: 'America/Denver', label: 'Mountain Time', abbreviation: 'MST' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time', abbreviation: 'PST' },
 ];
 
 export function getTimezoneAbbreviation(timezone: string): string {
   const option = TIMEZONE_OPTIONS.find(tz => tz.value === timezone);
-  return option?.abbreviation || 'CT';
+  return option?.abbreviation || 'CST';
 }
 
 export function formatTimeInTimezone(date: Date, timezone: string, format: string = 'h:mm a'): string {

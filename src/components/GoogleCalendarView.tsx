@@ -74,7 +74,7 @@ export function GoogleCalendarView({ selectedDate, onSlotSelect, selectedSlots, 
 
   useEffect(() => {
     fetchDayEvents();
-  }, [selectedDate]);
+  }, [selectedDate, selectedTimezone]);
 
   const generateHourlyGrid = () => {
     const hours = [];
